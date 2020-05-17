@@ -1,10 +1,10 @@
-# CITS3001 Project
+# CITS3002 Project
 
 The goal of this project is to develop a server application to manage the data and permit queries about Transperth bus and train routes. By successfully completing the project, you will have a greater understanding of the standard TCP and UDP protocols running over IP, communication between web-browsers and application programs using HTTP and HTML, and will have developed a simple text-based protocol to make and reply to queries for distributed information.
 
 # Operating system
 
-Operating system: Microsoft Windows 10 Pro, Windows Subsystem for Linux (WSL)
+Operating system: Microsoft Windows 10 Pro running Windows Subsystem for Linux (WSL)
 
 # Transperth data
 
