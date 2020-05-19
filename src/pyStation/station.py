@@ -44,29 +44,43 @@ def accept_tcp_wrapper(sock, sel):
     # create a data object that holds addr, inb and outb
     data = types.SimpleNamespace(addr=addr, inb=b'', outb=b'')
     events = selectors.EVENT_READ | selectors.EVENT_WRITE
+    # register the client socket
     sel.register(conn, events, data=data)
 
 
-def service_connection(key, mask, sel):
+def service_tcp_connection(key, mask, sel):
+    connected = True
     sock = key.fileobj
     data = key.data
+    # if the socket is ready for reading -- mask is True & selectors.EVENT_READ is True
     if mask & selectors.EVENT_READ:
-        recv_data = sock.recv(1024)  # Should be ready to read
+        # receive the data
+        recv_data = sock.recv(1024)
         if recv_data:  # if recv_data is not None
-            data.outb += recv_data
-        else:  # there is no data to be received
+            data.outb += recv_data  # append received data to data.outb
+        else:  # the client has closed their socket so the server should too.
             print('closing connection to', data.addr)
             sel.unregister(sock)
             sock.close()
     if mask & selectors.EVENT_WRITE:  # write the data back to the client
-        if data.outb:
-            print('echoing', repr(data.outb), 'to', data.addr)
-            sent = sock.send(data.outb)  # Should be ready to write
-            data.outb = data.outb[sent:]
+        if data.outb and connected:
+            # print('echoing', repr(data.outb), 'to', data.addr)
+            # sent = sock.send(data.outb)  # send data back to the client
+            # data.outb = data.outb[sent:]  # remove sent data from data.outb
+            sendData = "HTTP/1.1 200 OK\r\n"
+            sendData += "Content-Type: text/html; charset=utf-8\r\n"
+            sendData += "\r\n"
+            sendData += f"<html><body>Hello {data.addr}!</body></html>\r\n\r\n"
+            sock.send(sendData.encode())
+            connected = False
+            sock.close()
 
 
 def startTcpUdpPort(serverConfig):
+    # create selector
     sel = selectors.DefaultSelector()
+
+    # create TCP server socket
     tcpServerSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     tcpServerSocket.bind(serverConfig.TCP_ADDR)
     print(serverConfig.TCP_ADDR)
@@ -74,19 +88,34 @@ def startTcpUdpPort(serverConfig):
     print(f"[LISTENING] TCP Server is listening on {serverConfig.TCP_ADDR}.")
     tcpServerSocket.setblocking(False)
     sel.register(tcpServerSocket, selectors.EVENT_READ, data=None)
+
+    # create UDP server socket
     udpServerSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     udpServerSocket.bind(serverConfig.UDP_ADDR)
     print(f"[LISTENING] UDP Server is listening on {serverConfig.UDP_ADDR}.")
     sel.register(udpServerSocket, selectors.EVENT_READ, data=None)
+
+    # wait for connection
     while True:
+        # wait unitl registered file objects become ready and set a selector with no timeout
+        # the call will block until file object becomes ready -- either TCP or UDP has an EVENT_READ
         events = sel.select(timeout=None)
+
         for key, mask in events:
+            print(f"the key is: {key}.")
+            print(f"the sockname is: {key.fileobj.getsockname()}.")
+            print(f"the mask is: {mask}.")
+
+            # a listening socket that hasn't been accepted yet i.e. no data
             if key.data is None:
-                # print(key.fileobj.getsockname())
+
+                # if the listening socket is TCP
                 if key.fileobj.getsockname() == serverConfig.TCP_ADDR:
                     print("TCP accept wrapper!")
                     accept_tcp_wrapper(key.fileobj, sel)
-                elif key.fileobj.getsockname() == serverConfig.UDP_ADDR:
+
+                # if the listening socket is UDP
+                if key.fileobj.getsockname() == serverConfig.UDP_ADDR:
                     # print("UDP received!")
                     bytesAddressPair = udpServerSocket.recvfrom(1024)
                     message = bytesAddressPair[0]
@@ -98,13 +127,11 @@ def startTcpUdpPort(serverConfig):
                     udpServerSocket.sendto(
                         "Hello from server.".encode(), address)
 
+            # a client socket that has been accepted and now we need to service it i.e. has data
             else:
                 if key.fileobj.getsockname() == serverConfig.TCP_ADDR:
                     print("TCP service connection!")
-                    service_connection(key, mask, sel)
-                elif key.fileobj.getsockname() == serverConfig.UDP_ADDR:
-                    print("UDP connection!")
-                    # UDP STUFF
+                    service_tcp_connection(key, mask, sel)
 
         # conn, addr = tcpServerSocket.accept()  # accept new connection
         # handleTcpClient(serverConfig, conn, addr)
