@@ -10,7 +10,8 @@ FORMAT = "UTF-8"
 
 
 class ServerConfig:
-    def __init__(self, tcp_port, udp_port):
+    def __init__(self, station, tcp_port, udp_port):
+        self.STATION = station
         self.HEADER = 64
         self.TCP_PORT = tcp_port
         self.UDP_PORT = udp_port
@@ -146,26 +147,34 @@ def serveTcpUdpPort(serverConfig, sel, tcpServerSocket, udpServerSocket):
         # handleTcpClient(serverConfig, conn, addr)
 
 
-# def handleInputs(argv):
-#     if len(argv) == 0:
-#         print("Missing inputs.")
-#         sys.exit(2)
+def acceptInputs(argv):
+    if len(argv) == 0:
+        print("Missing inputs.")
+        sys.exit(2)
 
-#     station = argv[0]
-#     stationTcpPort = argv[1]
-#     stationUdpPort = argv[2]
+    stationName = argv[0]
+    stationTcpPort = int(argv[1])
+    stationUdpPort = int(argv[2])
+
+    serverConfig = ServerConfig(stationName, stationTcpPort, stationUdpPort)
+    adjacentStation = argv[3:]
+
+    return serverConfig, adjacentStation
 
 
 def main(argv):  #
-    tcp_port = 5050
-    udp_port = 6060
+    # tcp_port = 5050
+    # udp_port = 6060
     # server = socket.gethostbyname(socket.gethostname())
     # print(server)
     # format = 'utf-8'
-    serverConfig = ServerConfig(tcp_port, udp_port)
 
     # TODO: store config and neighbours from inputs
-
+    serverConfig, adjacentStation = acceptInputs(argv)
+    print(f"Station Name: {serverConfig.STATION}")
+    print(f"TCP_ADDR: {serverConfig.TCP_ADDR}")
+    print(f"UDP_ADDR: {serverConfig.UDP_ADDR}")
+    print(f"Adjacent station: {adjacentStation}")
     # TODO: Read CSV timetable file -- assume that all contents are correct
 
     # Create selector
