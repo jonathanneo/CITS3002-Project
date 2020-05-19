@@ -76,10 +76,7 @@ def service_tcp_connection(key, mask, sel):
             sock.close()
 
 
-def startTcpUdpPort(serverConfig):
-    # create selector
-    sel = selectors.DefaultSelector()
-
+def startTcpPort(serverConfig, sel):
     # create TCP server socket
     tcpServerSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     tcpServerSocket.bind(serverConfig.TCP_ADDR)
@@ -88,13 +85,19 @@ def startTcpUdpPort(serverConfig):
     print(f"[LISTENING] TCP Server is listening on {serverConfig.TCP_ADDR}.")
     tcpServerSocket.setblocking(False)
     sel.register(tcpServerSocket, selectors.EVENT_READ, data=None)
+    return tcpServerSocket
 
+
+def startUdpPort(serverConfig, sel):
     # create UDP server socket
     udpServerSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     udpServerSocket.bind(serverConfig.UDP_ADDR)
     print(f"[LISTENING] UDP Server is listening on {serverConfig.UDP_ADDR}.")
     sel.register(udpServerSocket, selectors.EVENT_READ, data=None)
+    return udpServerSocket
 
+
+def serveTcpUdpPort(serverConfig, sel, tcpServerSocket, udpServerSocket):
     # wait for connection
     while True:
         # wait unitl registered file objects become ready and set a selector with no timeout
@@ -137,30 +140,21 @@ def startTcpUdpPort(serverConfig):
         # handleTcpClient(serverConfig, conn, addr)
 
 
-def startUdpPort(serverConfig):
-    udpServerSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    udpServerSocket.bind(serverConfig.UDP_ADDR)
-    print(f"[LISTENING] UDP Server is listening on {serverConfig.UDP_ADDR}.")
-    while True:
-        bytesAddressPair = udpServerSocket.recvfrom(1024)
-        message = bytesAddressPair[0]
-        address = bytesAddressPair[1]
-        clientMsg = f"Message from Client:{message}"
-        clientIP = f"Client IP Address:{address}"
-        print(clientMsg)
-        print(clientIP)
-        udpServerSocket.sendto("Hello from server.".encode(), address)
-
-
 def main():
     tcp_port = 5050
     udp_port = 6060
     server = socket.gethostbyname(socket.gethostname())
     format = 'utf-8'
     serverConfig = ServerConfig(tcp_port, udp_port, server, format)
-    # Start TCP port
-    startTcpUdpPort(serverConfig)
 
+    # Create selector
+    sel = selectors.DefaultSelector()
+    # Start TCP port
+    tcpServerSocket = startTcpPort(serverConfig, sel)
+    # Start UDP port
+    udpServerSocket = startUdpPort(serverConfig, sel)
+    # Serve TCP and UDP ports
+    serveTcpUdpPort(serverConfig, sel, tcpServerSocket, udpServerSocket)
     # Read CSV timetable file -- assume that all contents are correct
 
     return None
