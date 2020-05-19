@@ -22,6 +22,10 @@ class ServerConfig:
         self.FORMAT = FORMAT
         self.DISCONNECT_MESSAGE = "!DISCONNECT"
 
+    def addCoordinates(self, x, y):
+        self.x = x
+        self.y = y
+
 
 def handleTcpClient(serverConfig, conn, addr):
     print(f"[NEW CONNECTION] {addr} connected.")
@@ -186,11 +190,14 @@ def main(argv):
     print(f"UDP_ADDR: {serverConfig.UDP_ADDR}")
     print(f"Adjacent station: {adjacentStation}")
 
-    # TODO: Read CSV timetable file -- assume that all contents are correct
+    # Read CSV timetable file -- assume that all contents are correct
     path = str(pathlib.Path(__file__).parent.absolute()).replace(
-        "\src\pyStation", f"\datafiles\\tt-{serverConfig.STATION}.csv")
+        "\src\pyStation", f"\datafiles\\tt-{serverConfig.STATION}")
     print(path)
     timetable, stationCoordinates = read_timetable(path)
+    serverConfig.addCoordinates(
+        float(stationCoordinates[1]), float(stationCoordinates[2]))  # add coordinates
+    print(f"X: {serverConfig.x} | Y : {serverConfig.y} ")
     print("timetable: ")
     for row in timetable:
         print(row)
