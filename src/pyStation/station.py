@@ -1,17 +1,23 @@
 import socket
 import selectors
 import types
+import sys
+
+
+# CONSTANTS
+SERVER = "127.0.0.1"
+FORMAT = "UTF-8"
 
 
 class ServerConfig:
-    def __init__(self, tcp_port, udp_port, server, format):
+    def __init__(self, tcp_port, udp_port):
         self.HEADER = 64
         self.TCP_PORT = tcp_port
         self.UDP_PORT = udp_port
-        self.SERVER = server
+        self.SERVER = SERVER
         self.TCP_ADDR = (self.SERVER, self.TCP_PORT)
         self.UDP_ADDR = (self.SERVER, self.UDP_PORT)
-        self.FORMAT = format
+        self.FORMAT = FORMAT
         self.DISCONNECT_MESSAGE = "!DISCONNECT"
 
 
@@ -140,12 +146,27 @@ def serveTcpUdpPort(serverConfig, sel, tcpServerSocket, udpServerSocket):
         # handleTcpClient(serverConfig, conn, addr)
 
 
-def main():
+# def handleInputs(argv):
+#     if len(argv) == 0:
+#         print("Missing inputs.")
+#         sys.exit(2)
+
+#     station = argv[0]
+#     stationTcpPort = argv[1]
+#     stationUdpPort = argv[2]
+
+
+def main(argv):  #
     tcp_port = 5050
     udp_port = 6060
-    server = socket.gethostbyname(socket.gethostname())
-    format = 'utf-8'
-    serverConfig = ServerConfig(tcp_port, udp_port, server, format)
+    # server = socket.gethostbyname(socket.gethostname())
+    # print(server)
+    # format = 'utf-8'
+    serverConfig = ServerConfig(tcp_port, udp_port)
+
+    # TODO: store config and neighbours from inputs
+
+    # TODO: Read CSV timetable file -- assume that all contents are correct
 
     # Create selector
     sel = selectors.DefaultSelector()
@@ -155,10 +176,9 @@ def main():
     udpServerSocket = startUdpPort(serverConfig, sel)
     # Serve TCP and UDP ports
     serveTcpUdpPort(serverConfig, sel, tcpServerSocket, udpServerSocket)
-    # Read CSV timetable file -- assume that all contents are correct
 
     return None
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:])  #
