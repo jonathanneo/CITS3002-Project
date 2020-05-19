@@ -27,26 +27,26 @@ class ServerConfig:
         self.y = y
 
 
-def handleTcpClient(serverConfig, conn, addr):
-    print(f"[NEW CONNECTION] {addr} connected.")
-    connected = True
-    while connected:
-        # conn.recv(serverConfig.HEADER).decode(serverConfig.FORMAT)
-        # Receive 1024 bytes at a time
-        msg = conn.recv(1024).decode(serverConfig.FORMAT)
-        # if conn.recv() returns an empty bytes object b'' , then terminate the loop
-        if not msg:
-            connected = False
-        pieces = msg.split("\n")
-        if (len(pieces) > 0):
-            print(pieces[0])
-        data = "HTTP/1.1 200 OK\r\n"
-        data += "Content-Type: text/html; charset=utf-8\r\n"
-        data += "\r\n"
-        data += f"<html><body>Hello {addr}!</body></html>\r\n\r\n"
-        conn.send(data.encode())
-        connected = False
-    conn.close()
+# def handleTcpClient(serverConfig, conn, addr):
+#     print(f"[NEW CONNECTION] {addr} connected.")
+#     connected = True
+#     while connected:
+#         # conn.recv(serverConfig.HEADER).decode(serverConfig.FORMAT)
+#         # Receive 1024 bytes at a time
+#         msg = conn.recv(1024).decode(serverConfig.FORMAT)
+#         # if conn.recv() returns an empty bytes object b'' , then terminate the loop
+#         if not msg:
+#             connected = False
+#         pieces = msg.split("\n")
+#         if (len(pieces) > 0):
+#             print(pieces[0])
+#         data = "HTTP/1.1 200 OK\r\n"
+#         data += "Content-Type: text/html; charset=utf-8\r\n"
+#         data += "\r\n"
+#         data += f"<html><body>Hello {addr}!</body></html>\r\n\r\n"
+#         conn.send(data.encode())
+#         connected = False
+#     conn.close()
 
 
 def accept_tcp_wrapper(sock, sel):
@@ -58,6 +58,20 @@ def accept_tcp_wrapper(sock, sel):
     events = selectors.EVENT_READ | selectors.EVENT_WRITE
     # register the client socket
     sel.register(conn, events, data=data)
+
+
+html_content = """
+<html>
+    <body>
+        Hello {address}
+        <form>
+            <label for="name">Name: </label><br>
+            <input type="text" id="name"><br>
+            <input type="submit" value="Submit">
+        </form>
+    </body>
+</html>
+"""
 
 
 def service_tcp_connection(key, mask, sel):
@@ -82,10 +96,10 @@ def service_tcp_connection(key, mask, sel):
             sendData = "HTTP/1.1 200 OK\r\n"
             sendData += "Content-Type: text/html; charset=utf-8\r\n"
             sendData += "\r\n"
-            sendData += f"<html><body>Hello {data.addr}!</body></html>\r\n\r\n"
+            sendData += html_content.format(address=data.addr)
             sock.send(sendData.encode())
             connected = False
-            sock.close()
+            # sock.close()
 
 
 def startTcpPort(serverConfig, sel):
