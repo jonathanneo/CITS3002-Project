@@ -2,7 +2,8 @@ import socket
 import selectors
 import types
 import sys
-
+import csv
+import pathlib
 
 # CONSTANTS
 SERVER = "127.0.0.1"
@@ -87,7 +88,6 @@ def startTcpPort(serverConfig, sel):
     # create TCP server socket
     tcpServerSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     tcpServerSocket.bind(serverConfig.TCP_ADDR)
-    print(serverConfig.TCP_ADDR)
     tcpServerSocket.listen()
     print(f"[LISTENING] TCP Server is listening on {serverConfig.TCP_ADDR}.")
     tcpServerSocket.setblocking(False)
@@ -153,8 +153,8 @@ def acceptInputs(argv):
         sys.exit(2)
 
     stationName = argv[0]
-    stationTcpPort = int(argv[1])
-    stationUdpPort = int(argv[2])
+    stationTcpPort = int(argv[1])  # tcp_port = 5050
+    stationUdpPort = int(argv[2])  # udp_port = 6060
 
     serverConfig = ServerConfig(stationName, stationTcpPort, stationUdpPort)
     adjacentStation = argv[3:]
@@ -162,21 +162,38 @@ def acceptInputs(argv):
     return serverConfig, adjacentStation
 
 
-def main(argv):  #
-    # tcp_port = 5050
-    # udp_port = 6060
-    # server = socket.gethostbyname(socket.gethostname())
-    # print(server)
-    # format = 'utf-8'
+def read_timetable(filepath):
+    timetable = []
+    rowCount = 0
+    with open(filepath, 'r') as file:
+        reader = csv.reader(file, delimiter=',')
+        for row in reader:
+            if rowCount == 0:
+                stationCoordinates = row
 
-    # TODO: store config and neighbours from inputs
+            else:
+                timetable.append(row)
+            rowCount = rowCount+1
+
+    return timetable, stationCoordinates
+
+
+def main(argv):
+    # store config and neighbours from inputs
     serverConfig, adjacentStation = acceptInputs(argv)
     print(f"Station Name: {serverConfig.STATION}")
     print(f"TCP_ADDR: {serverConfig.TCP_ADDR}")
     print(f"UDP_ADDR: {serverConfig.UDP_ADDR}")
     print(f"Adjacent station: {adjacentStation}")
-    # TODO: Read CSV timetable file -- assume that all contents are correct
 
+    # TODO: Read CSV timetable file -- assume that all contents are correct
+    path = str(pathlib.Path(__file__).parent.absolute()).replace(
+        "\src\pyStation", f"\datafiles\\tt-{serverConfig.STATION}.csv")
+    print(path)
+    timetable, stationCoordinates = read_timetable(path)
+    print("timetable: ")
+    for row in timetable:
+        print(row)
     # Create selector
     sel = selectors.DefaultSelector()
     # Start TCP port

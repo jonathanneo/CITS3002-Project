@@ -1,2 +1,3 @@
 # ignore datafiles
-datafiles/
+datafiles*/
+*.Test
