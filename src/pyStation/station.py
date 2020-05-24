@@ -230,9 +230,15 @@ def serveTcpUdpPort(serverConfig, sel, tcpServerSocket, udpServerSocket):
                     # if the listening socket is UDP
                     if key.fileobj.getsockname() == serverConfig.UDP_ADDR:
                         # print("UDP received!")
-                        bytesAddressPair = udpServerSocket.recvfrom(1024)
-                        message = bytesAddressPair[0]
+                        bytesAddressPair = udpServerSocket.recvfrom(
+                            serverConfig.HEADER)
+                        message_length = bytesAddressPair[0].decode()
+                        bytesAddressPair = udpServerSocket.recvfrom(
+                            serverConfig.HEADER)
+                        print(f"Message length: {message_length}")
+                        message = bytesAddressPair[0].decode()
                         address = bytesAddressPair[1]
+
                         clientMsg = f"Message from Client:{message}"
                         clientIP = f"Client IP Address:{address}"
                         print(clientMsg)
