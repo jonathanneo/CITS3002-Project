@@ -15,6 +15,12 @@ Perth's Public Transport Authority (PTA, or Transperth) provides public access t
 We will approach the project using connected networks of increasing size: 1 station, 2 stations, 5 stations, 10 stations, 20 stations,....
 Note that running more than 10 Java virtual machines on a single computer will probably not be possible.
 
+To test my code, use:
+
+```
+py station.py North_Terminus 5050 6060 9000 9001 9002
+```
+
 # Resources
 
 - Project Information: https://teaching.csse.uwa.edu.au/units/CITS3002/project2020/index.php

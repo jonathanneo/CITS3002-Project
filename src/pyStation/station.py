@@ -27,31 +27,28 @@ class ServerConfig:
         self.y = y
 
 
-# def handleTcpClient(serverConfig, conn, addr):
-#     print(f"[NEW CONNECTION] {addr} connected.")
-#     connected = True
-#     while connected:
-#         # conn.recv(serverConfig.HEADER).decode(serverConfig.FORMAT)
-#         # Receive 1024 bytes at a time
-#         msg = conn.recv(1024).decode(serverConfig.FORMAT)
-#         # if conn.recv() returns an empty bytes object b'' , then terminate the loop
-#         if not msg:
-#             connected = False
-#         pieces = msg.split("\n")
-#         if (len(pieces) > 0):
-#             print(pieces[0])
-#         data = "HTTP/1.1 200 OK\r\n"
-#         data += "Content-Type: text/html; charset=utf-8\r\n"
-#         data += "\r\n"
-#         data += f"<html><body>Hello {addr}!</body></html>\r\n\r\n"
-#         conn.send(data.encode())
-#         connected = False
-#     conn.close()
+html_content = """
+<form action="http://{host}:{port}" method="POST">
+    <div>
+        <h1>Welcome to {station}</h1><br>
+        Hello {address} <br>
+        <label for="station">What station would you like to go to?</label>
+        <input name="Station" id="station">
+    </div>
+    <div>
+        <label for="time">When do you want to leave?</label>
+        <input name="time" id="time">
+    </div>
+    <div>
+        <input type="submit" value="Get travel plan">
+    </div>
+</form>
+"""
 
 
 def accept_tcp_wrapper(sock, sel):
     conn, addr = sock.accept()  # Should be ready to read
-    print('accepted connection from', addr)
+    # print('accepted connection from', addr)
     conn.setblocking(False)
     # create a data object that holds addr, inb and outb
     data = types.SimpleNamespace(addr=addr, inb=b'', outb=b'')
@@ -60,46 +57,55 @@ def accept_tcp_wrapper(sock, sel):
     sel.register(conn, events, data=data)
 
 
-html_content = """
-<html>
-    <body>
-        Hello {address}
-        <form>
-            <label for="name">Name: </label><br>
-            <input type="text" id="name"><br>
-            <input type="submit" value="Submit">
-        </form>
-    </body>
-</html>
-"""
+def getRequestBody(request_array):
+    for index, item in enumerate(request_array):
+        if item == "":
+            return request_array[index + 1]
 
 
-def service_tcp_connection(key, mask, sel):
-    connected = True
+def service_tcp_connection(key, mask, sel, serverConfig):
+    request = False
+    method = "GET"
     sock = key.fileobj
     data = key.data
     # if the socket is ready for reading -- mask is True & selectors.EVENT_READ is True
     if mask & selectors.EVENT_READ:
         # receive the data
-        recv_data = sock.recv(1024)
+        recv_data = sock.recv(1024).decode(FORMAT)
         if recv_data:  # if recv_data is not None
-            data.outb += recv_data  # append received data to data.outb
+            # data.outb += recv_data  # append received data to data.outb
+            request = True
+            method = recv_data.split()[0]
+            print(f"Request method: {method}")
+            requestBody = getRequestBody(recv_data.split("\r\n"))
+            print(f"Request body: {requestBody}")
+            # for index, item in enumerate(array):
+            #     print(f"{index}: {item}")
+            # print(f"Received data: {recv_data}\r\n\r\n")
+
         else:  # the client has closed their socket so the server should too.
             print('closing connection to', data.addr)
             sel.unregister(sock)
             sock.close()
     if mask & selectors.EVENT_WRITE:  # write the data back to the client
-        if data.outb and connected:
-            # print('echoing', repr(data.outb), 'to', data.addr)
-            # sent = sock.send(data.outb)  # send data back to the client
-            # data.outb = data.outb[sent:]  # remove sent data from data.outb
-            sendData = "HTTP/1.1 200 OK\r\n"
-            sendData += "Content-Type: text/html; charset=utf-8\r\n"
-            sendData += "\r\n"
-            sendData += html_content.format(address=data.addr)
-            sock.send(sendData.encode())
-            connected = False
-            # sock.close()
+        # we have received, and now we can send
+        if request:
+            if method == "GET" or method == "POST":
+                # print('echoing', repr(data.outb), 'to', data.addr)
+                # sent = sock.send(data.outb)  # send data back to the client
+                # data.outb = data.outb[sent:]  # remove sent data from data.outb
+                sendData = "HTTP/1.1 200 OK\r\n"
+                sendData += "Content-Type: text/html; charset=utf-8\r\n"
+                sendData += "\r\n"
+                sendData += html_content.format(station=serverConfig.STATION,
+                                                address=data.addr,
+                                                host=key.fileobj.getsockname()[
+                                                    0],
+                                                port=key.fileobj.getsockname()[1])
+                sock.send(sendData.encode())
+                request = False  # request fulfiled
+                sel.unregister(sock)
+                sock.close()
 
 
 def startTcpPort(serverConfig, sel):
@@ -124,45 +130,50 @@ def startUdpPort(serverConfig, sel):
 
 def serveTcpUdpPort(serverConfig, sel, tcpServerSocket, udpServerSocket):
     # wait for connection
-    while True:
-        # wait unitl registered file objects become ready and set a selector with no timeout
-        # the call will block until file object becomes ready -- either TCP or UDP has an EVENT_READ
-        events = sel.select(timeout=None)
+    try:
+        while True:
+            # wait unitl registered file objects become ready and set a selector with no timeout
+            # the call will block until file object becomes ready -- either TCP or UDP has an EVENT_READ
+            events = sel.select(timeout=None)
 
-        for key, mask in events:
-            print(f"the key is: {key}.")
-            print(f"the sockname is: {key.fileobj.getsockname()}.")
-            print(f"the mask is: {mask}.")
+            for key, mask in events:
+                # print(f"the key is: {key}.")
+                # print(f"the sockname is: {key.fileobj.getsockname()}.")
+                # print(f"the mask is: {mask}.")
 
-            # a listening socket that hasn't been accepted yet i.e. no data
-            if key.data is None:
+                # a listening socket that hasn't been accepted yet i.e. no data
+                if key.data is None:
 
-                # if the listening socket is TCP
-                if key.fileobj.getsockname() == serverConfig.TCP_ADDR:
-                    print("TCP accept wrapper!")
-                    accept_tcp_wrapper(key.fileobj, sel)
+                    # if the listening socket is TCP
+                    if key.fileobj.getsockname() == serverConfig.TCP_ADDR:
+                        # print("TCP accept wrapper!")
+                        accept_tcp_wrapper(key.fileobj, sel)
 
-                # if the listening socket is UDP
-                if key.fileobj.getsockname() == serverConfig.UDP_ADDR:
-                    # print("UDP received!")
-                    bytesAddressPair = udpServerSocket.recvfrom(1024)
-                    message = bytesAddressPair[0]
-                    address = bytesAddressPair[1]
-                    clientMsg = f"Message from Client:{message}"
-                    clientIP = f"Client IP Address:{address}"
-                    print(clientMsg)
-                    print(clientIP)
-                    udpServerSocket.sendto(
-                        "Hello from server.".encode(), address)
+                    # if the listening socket is UDP
+                    if key.fileobj.getsockname() == serverConfig.UDP_ADDR:
+                        # print("UDP received!")
+                        bytesAddressPair = udpServerSocket.recvfrom(1024)
+                        message = bytesAddressPair[0]
+                        address = bytesAddressPair[1]
+                        clientMsg = f"Message from Client:{message}"
+                        clientIP = f"Client IP Address:{address}"
+                        print(clientMsg)
+                        print(clientIP)
+                        udpServerSocket.sendto(
+                            "Hello from server.".encode(), address)
 
-            # a client socket that has been accepted and now we need to service it i.e. has data
-            else:
-                if key.fileobj.getsockname() == serverConfig.TCP_ADDR:
-                    print("TCP service connection!")
-                    service_tcp_connection(key, mask, sel)
+                # a client socket that has been accepted and now we need to service it i.e. has data
+                else:
+                    if key.fileobj.getsockname() == serverConfig.TCP_ADDR:
+                        # print("TCP service connection!")
+                        service_tcp_connection(key, mask, sel, serverConfig)
 
-        # conn, addr = tcpServerSocket.accept()  # accept new connection
-        # handleTcpClient(serverConfig, conn, addr)
+            # conn, addr = tcpServerSocket.accept()  # accept new connection
+            # handleTcpClient(serverConfig, conn, addr)
+    except KeyboardInterrupt:
+        print("Caught keyboard interrupt, exiting")
+    finally:
+        sel.close()
 
 
 def acceptInputs(argv):
