@@ -10,6 +10,14 @@ SERVER = "127.0.0.1"
 FORMAT = "UTF-8"
 
 
+class TimetableRecord:
+    def __init__(self, departureTime, depatureLocation, arrivalTime, arrivalLocation):
+        self.departureTime = departureTime
+        self.depatureLocation = depatureLocation
+        self.arrivalTime = arrivalTime
+        self.arrivalLocation = arrivalLocation
+
+
 class ServerConfig:
     def __init__(self, station, tcp_port, udp_port):
         self.STATION = station
@@ -26,23 +34,69 @@ class ServerConfig:
         self.x = x
         self.y = y
 
+    def addTimetable(self, timetable):
+        self.timetable = timetable
+        # for record in timetable:
+        #     timetableRecord = TimetableRecord(
+        #         record[0], record[1], record[2], record[3])
+        #     timetableRecordString = f"{{{timetableRecord}}}"
+        #     self.timetable.append(timetableRecordString)
+
+
+class StationMessage:
+    def __init__(self, sourceName, destinationName, sourceAddress, destinationAddress):
+        self.sourceName = sourceName
+        self.destinationName = destinationName
+        self.sourceAddress = sourceAddress
+        self.destinationAddress = destinationAddress
+
 
 html_content = """
-<form action="http://{host}:{port}" method="POST">
-    <div>
-        <h1>Welcome to {station}</h1><br>
-        Hello {address} <br>
-        <label for="station">What station would you like to go to?</label>
-        <input name="Station" id="station">
-    </div>
-    <div>
-        <label for="time">When do you want to leave?</label>
-        <input name="time" id="time">
-    </div>
-    <div>
-        <input type="submit" value="Get travel plan">
-    </div>
-</form>
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Transperth Journey Planner</title>
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+        <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css" integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh" crossorigin="anonymous">
+    </head>
+    <body>
+        <div class="container">
+            <h1>Welcome to {station}</h1><br>
+            Hello {address} <br>
+            <form action="http://{host}:{port}" method="POST">
+                <div>
+                    <label for="station">What station would you like to go to?</label>
+                    <input name="Station" id="station" class="form-control">
+                </div>
+                <div>
+                    <label for="time">When do you want to leave?</label>
+                    <select name="time" id="timetable" class="form-control"></select>
+                </div>
+                <div>
+                    <input type="submit" value="Get travel plan" class="btn btn-primary">
+                </div>
+            </form>
+        </div>
+    </body>
+</html>
+
+<script type="text/javascript">
+
+    const timetable = {timetable};
+
+    const updateTimetable = ($timetable) => {{
+        timetable.map(record => $('<option>')
+            .attr({{ value : record[0] }})
+            .text(record[0])   
+        ).forEach($option => $timetable.append($option));
+    }}
+
+    $(() => {{
+        const $timetable = $("#timetable");
+        console.log($timetable);
+        updateTimetable($timetable);
+    }});
+</script>
 """
 
 
@@ -73,15 +127,11 @@ def service_tcp_connection(key, mask, sel, serverConfig):
         # receive the data
         recv_data = sock.recv(1024).decode(FORMAT)
         if recv_data:  # if recv_data is not None
-            # data.outb += recv_data  # append received data to data.outb
             request = True
             method = recv_data.split()[0]
             print(f"Request method: {method}")
             requestBody = getRequestBody(recv_data.split("\r\n"))
             print(f"Request body: {requestBody}")
-            # for index, item in enumerate(array):
-            #     print(f"{index}: {item}")
-            # print(f"Received data: {recv_data}\r\n\r\n")
 
         else:  # the client has closed their socket so the server should too.
             print('closing connection to', data.addr)
@@ -91,13 +141,12 @@ def service_tcp_connection(key, mask, sel, serverConfig):
         # we have received, and now we can send
         if request:
             if method == "GET" or method == "POST":
-                # print('echoing', repr(data.outb), 'to', data.addr)
-                # sent = sock.send(data.outb)  # send data back to the client
-                # data.outb = data.outb[sent:]  # remove sent data from data.outb
+                # timetableString = ''.join(serverConfig.timetable)
                 sendData = "HTTP/1.1 200 OK\r\n"
                 sendData += "Content-Type: text/html; charset=utf-8\r\n"
                 sendData += "\r\n"
                 sendData += html_content.format(station=serverConfig.STATION,
+                                                timetable=serverConfig.timetable,
                                                 address=data.addr,
                                                 host=key.fileobj.getsockname()[
                                                     0],
@@ -182,8 +231,8 @@ def acceptInputs(argv):
         sys.exit(2)
 
     stationName = argv[0]
-    stationTcpPort = int(argv[1])  # tcp_port = 5050
-    stationUdpPort = int(argv[2])  # udp_port = 6060
+    stationTcpPort = int(argv[1])  # e.g. tcp_port = 5050
+    stationUdpPort = int(argv[2])  # e.g. udp_port = 6060
 
     serverConfig = ServerConfig(stationName, stationTcpPort, stationUdpPort)
     adjacentStation = argv[3:]
@@ -215,6 +264,7 @@ def main(argv):
     print(f"UDP_ADDR: {serverConfig.UDP_ADDR}")
     print(f"Adjacent station: {adjacentStation}")
 
+    # TODO: ability to detect that a timetable file has changed, to delete/dispose of the previous information, and move to using the new information
     # Read CSV timetable file -- assume that all contents are correct
     path = str(pathlib.Path(__file__).parent.absolute()).replace(
         "\src\pyStation", f"\datafiles\\tt-{serverConfig.STATION}")
@@ -223,8 +273,10 @@ def main(argv):
     serverConfig.addCoordinates(
         float(stationCoordinates[1]), float(stationCoordinates[2]))  # add coordinates
     print(f"X: {serverConfig.x} | Y : {serverConfig.y} ")
+    serverConfig.addTimetable(timetable)
     print("timetable: ")
-    for row in timetable:
+    svrTimetable = serverConfig.timetable
+    for row in svrTimetable:
         print(row)
     # Create selector
     sel = selectors.DefaultSelector()
@@ -234,9 +286,14 @@ def main(argv):
     udpServerSocket = startUdpPort(serverConfig, sel)
     # Serve TCP and UDP ports
     serveTcpUdpPort(serverConfig, sel, tcpServerSocket, udpServerSocket)
-
+    # TODO: Design and implementation of a simple programming language independent protocol to exchange queries,
+    # responses, and (possibly) control information between stations.
+    # TODO: Ability to find a valid (but not necessarily optimal) route between origin and destination stations,
+    # for varying sized transport-networks of 2, 3, 5, 10, and 20 stations (including transport-networks involving cycles),
+    # with no station attempting to collate information about the whole transport-network; ability to support multiple, concurrent queries from different clients.
+    # TODO: Ability to detect and report when a valid route does not exist (on the current day).
     return None
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])  #
+    main(sys.argv[1:])
