@@ -11,12 +11,12 @@ SERVER = "127.0.0.1"
 FORMAT = "UTF-8"
 
 
-class TimetableRecord:
-    def __init__(self, departureTime, depatureLocation, arrivalTime, arrivalLocation):
-        self.departureTime = departureTime
-        self.depatureLocation = depatureLocation
-        self.arrivalTime = arrivalTime
-        self.arrivalLocation = arrivalLocation
+# class TimetableRecord:
+#     def __init__(self, departureTime, depatureLocation, arrivalTime, arrivalLocation):
+#         self.departureTime = departureTime
+#         self.depatureLocation = depatureLocation
+#         self.arrivalTime = arrivalTime
+#         self.arrivalLocation = arrivalLocation
 
 
 class ServerConfig:
@@ -44,12 +44,18 @@ class ServerConfig:
             self.neighbours.append((self.SERVER, int(neighbour)))
 
 
-class StationMessage:
-    def __init__(self, sourceName, destinationName, sourceAddress, destinationAddress):
+class Station:
+    def __init__(self, stationName, departureTimes):
+        self.stationName = stationName
+        self.depatureTimes = departureTimes
+
+
+class Message:
+    def __init__(self, sourceName, destinationName, numberHops):
         self.sourceName = sourceName
         self.destinationName = destinationName
-        self.sourceAddress = sourceAddress
-        self.destinationAddress = destinationAddress
+        self.route = []
+        self.numberHops = numberHops
 
 
 html_content = """
@@ -206,6 +212,27 @@ def startUdpPort(serverConfig, sel):
     return udpServerSocket
 
 
+def serviceUdpCommunication(key, mask, sel, serverConfig, udpServerSocket):
+    bytesAddressPair = udpServerSocket.recvfrom(
+        serverConfig.HEADER)
+    message_length = bytesAddressPair[0].decode()
+    bytesAddressPair = udpServerSocket.recvfrom(
+        serverConfig.HEADER)
+    print(f"Message length: {message_length}")
+    message = bytesAddressPair[0].decode()
+    message = eval(message)  # convert string to json
+    address = bytesAddressPair[1]
+    clientMsg = f"Message from Client:{message}"
+    clientIP = f"Client IP Address:{address}"
+    print(clientMsg)
+    print(clientIP)
+    for record in message:
+        if record.get("station") != "":
+            print(f"station: {record.get('station')}")
+            #         # udpServerSocket.sendto(
+            #         #     "Hello from server.".encode(), address)
+
+
 def serveTcpUdpPort(serverConfig, sel, tcpServerSocket, udpServerSocket):
     # wait for connection
     try:
@@ -229,22 +256,8 @@ def serveTcpUdpPort(serverConfig, sel, tcpServerSocket, udpServerSocket):
 
                     # if the listening socket is UDP
                     if key.fileobj.getsockname() == serverConfig.UDP_ADDR:
-                        # print("UDP received!")
-                        bytesAddressPair = udpServerSocket.recvfrom(
-                            serverConfig.HEADER)
-                        message_length = bytesAddressPair[0].decode()
-                        bytesAddressPair = udpServerSocket.recvfrom(
-                            serverConfig.HEADER)
-                        print(f"Message length: {message_length}")
-                        message = bytesAddressPair[0].decode()
-                        address = bytesAddressPair[1]
-
-                        clientMsg = f"Message from Client:{message}"
-                        clientIP = f"Client IP Address:{address}"
-                        print(clientMsg)
-                        print(clientIP)
-                        # udpServerSocket.sendto(
-                        #     "Hello from server.".encode(), address)
+                        serviceUdpCommunication(
+                            key, mask, sel, serverConfig, udpServerSocket)
 
                 # a client socket that has been accepted and now we need to service it i.e. has data
                 else:
