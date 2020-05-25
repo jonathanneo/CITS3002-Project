@@ -7,10 +7,12 @@ import pathlib
 import json
 import time as ts
 import urllib
+from datetime import datetime
 
 # CONSTANTS
 SERVER = "127.0.0.1"
 FORMAT = "UTF-8"
+TRIP_TYPE = ["FastestTrip", "LeastTransfers"]
 
 
 class Station:
@@ -51,7 +53,10 @@ class Station:
 
     def getEarliestTrip(self, time):
         for timetableRecord in self.timetable:
-            if time >= timetableRecord[0]:
+            timeValue = datetime.strptime(time, "%H:%M")
+            timetableRecordValue = datetime.strptime(
+                timetableRecord[0], "%H:%M")
+            if timetableRecordValue >= timeValue:
                 return timetableRecord[0]
 
     def getStationString(self, timestamp, time):
@@ -87,7 +92,7 @@ class MessageSentLogs:
 
 
 class Message:
-    def __init__(self, sourceName, destinationName, requestType, time, timestamp):
+    def __init__(self, sourceName, destinationName, tripType, time, timestamp):
         self.sourceName = '"' + sourceName + '"'
         if destinationName == None:
             destinationName = '""'
@@ -95,11 +100,11 @@ class Message:
             destinationName = '"' + destinationName + '"'
         self.destinationName = destinationName
         self.route = []
-        if requestType == None:
-            requestType = '""'
+        if tripType == None:
+            tripType = '""'
         else:
-            requestType = '"' + requestType + '"'
-        self.requestType = requestType
+            tripType = '"' + tripType + '"'
+        self.tripType = tripType
         self.hopCount = 1  # set hop count to 1 initially
         self.time = time
         self.timestamp = timestamp
@@ -119,7 +124,7 @@ class Message:
         return f'{{ "sourceName" : {self.sourceName} , \
                     "destinationName" : {self.destinationName} , \
                     "route": {self.getRouteString()}, \
-                    "requestType": {self.requestType}, \
+                    "tripType": {self.tripType}, \
                     "hopCount": {self.hopCount} \
              }}'
 
@@ -147,6 +152,10 @@ html_content = """
                     <select name="time" id="timetable" class="form-control"></select>
                 </div>
                 <div>
+                    <label for="tripType">What type of trip?</label>
+                    <select name="tripType" id="tripType" class="form-control"></select>
+                </div>
+                <div>
                     <input type="submit" value="Get travel plan" class="btn btn-primary">
                 </div>
             </form>
@@ -157,6 +166,7 @@ html_content = """
 <script type="text/javascript">
 
     const timetable = {timetable};
+    const tripTypes = {tripTypes};
 
     const updateTimetable = ($timetable) => {{
         timetable.map(record => $('<option>')
@@ -165,10 +175,18 @@ html_content = """
         ).forEach($option => $timetable.append($option));
     }}
 
+    const updateTripType = ($tripType) => {{
+        tripTypes.map(record => $('<option>')
+            .attr({{ value : record }})
+            .text(record)
+        ).forEach($option => $tripType.append($option));
+    }}
+
     $(() => {{
         const $timetable = $("#timetable");
-        console.log($timetable);
+        const $tripType = $("#tripType");
         updateTimetable($timetable);
+        updateTripType($tripType);
     }});
 </script>
 """
@@ -220,19 +238,19 @@ def send_udp(key, mask, sel, station, msg, udpServerSocket):
 def get_message_to_send(requestObject, station):
     destination = ""
     time = ""
-    requestType = ""
+    tripType = ""
     for item in requestObject:
         if item.get("station") != None:
             destination = item.get("station")
         if item.get("time") != None:
             time = str(item.get("time"))
             time = urllib.parse.unquote(time)
-        if item.get("requestType") != None:
-            requestType = item.get("requestType")
+        if item.get("tripType") != None:
+            tripType = item.get("tripType")
     timestamp = ts.time()
     message = Message(station.stationName,
                       destination,
-                      requestType,
+                      tripType,
                       time,
                       timestamp)
     message.addRoute(station)
@@ -276,7 +294,8 @@ def service_tcp_connection(key, mask, sel, station, udpServerSocket):
                 sendData += html_content.format(station=station.stationName,
                                                 timetable=station.timetable,
                                                 address=data.addr,
-                                                stationTcpAddress=station.getStationTCPAddress())
+                                                stationTcpAddress=station.getStationTCPAddress(),
+                                                tripTypes=TRIP_TYPE)
                 sock.send(sendData.encode())
                 request = False  # request fulfiled
                 sel.unregister(sock)
