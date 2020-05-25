@@ -13,12 +13,13 @@ from datetime import datetime
 SERVER = "127.0.0.1"
 FORMAT = "UTF-8"
 TRIP_TYPE = ["FastestTrip", "LeastTransfers"]
+HEADER_SIZE = 64
 
 
 class Station:
     def __init__(self, station, tcp_port, udp_port):
         self.stationName = station
-        self.HeaderSize = 64
+        self.HeaderSize = HEADER_SIZE
         self.tcp_port = tcp_port
         self.udp_port = udp_port
         self.server = SERVER
@@ -142,7 +143,7 @@ html_content = """
         <div class="container">
             <h1>Welcome to {station}</h1><br>
             Hello {address} <br>
-            <form action="{stationTcpAddress}" method="POST">
+            <form action="{stationTcpAddress}" method="GET">
                 <div>
                     <label for="station">What station would you like to go to?</label>
                     <input name="station" id="station" class="form-control">
@@ -204,9 +205,11 @@ def accept_tcp_wrapper(sock, sel):
 
 
 def getRequestBody(request_array):
-    for index, item in enumerate(request_array):
-        if item == "":
-            return request_array[index + 1]
+    return str(request_array[0]).split(" ")[1].replace("/?", "")
+    # for index, item in enumerate(request_array):
+    #     print(f"{index} || {item}")
+    # if item == "":
+    #     return request_array[index+1]
 
 
 def getRequestObject(request_body):
@@ -272,7 +275,7 @@ def service_tcp_connection(key, mask, sel, station, udpServerSocket):
             print(f"Request method: {method}")
             requestBody = getRequestBody(recv_data.split("\r\n"))
             print(f"Request body: {requestBody}")
-            if method == "POST":
+            if "station" in requestBody:
                 # send message
                 requestObject = getRequestObject(requestBody)
                 msg = get_message_to_send(requestObject, station)
@@ -287,19 +290,18 @@ def service_tcp_connection(key, mask, sel, station, udpServerSocket):
     if mask & selectors.EVENT_WRITE:  # write the data back to the client
         # we have received, and now we can send
         if request:
-            if method == "GET" or method == "POST":
-                sendData = "HTTP/1.1 200 OK\r\n"
-                sendData += "Content-Type: text/html; charset=utf-8\r\n"
-                sendData += "\r\n"
-                sendData += html_content.format(station=station.stationName,
-                                                timetable=station.timetable,
-                                                address=data.addr,
-                                                stationTcpAddress=station.getStationTCPAddress(),
-                                                tripTypes=TRIP_TYPE)
-                sock.send(sendData.encode())
-                request = False  # request fulfiled
-                sel.unregister(sock)
-                sock.close()
+            sendData = "HTTP/1.1 200 OK\r\n"
+            sendData += "Content-Type: text/html; charset=utf-8\r\n"
+            sendData += "\r\n"
+            sendData += html_content.format(station=station.stationName,
+                                            timetable=station.timetable,
+                                            address=data.addr,
+                                            stationTcpAddress=station.getStationTCPAddress(),
+                                            tripTypes=TRIP_TYPE)
+            sock.send(sendData.encode())
+            request = False  # request fulfiled
+            sel.unregister(sock)
+            sock.close()
 
 
 def startTcpPort(station, sel):
