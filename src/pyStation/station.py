@@ -40,7 +40,7 @@ class Station:
         string = "["
         for item in self.timetable:
             string += str(item) + ", "
-        string + "]"
+        string = string + "]"
         return string
 
     def getStationUDPAddress(self):
@@ -55,10 +55,10 @@ class Station:
                 return timetableRecord[0]
 
     def getStationString(self, timestamp, time):
-        return f'{{ "stationName" : {self.stationName} , \
-                    "timestamp" : {timestamp} , \
-                    "stationUDPAddress": {self.getStationUDPAddress()}, \
-                    "earliestTrip": {self.getEarliestTrip(time)} \
+        return f'{{ "stationName" : "{self.stationName}", \
+                    "timestamp" : "{timestamp}" , \
+                    "stationUDPAddress": "{self.getStationUDPAddress()}", \
+                    "earliestTrip": "{self.getEarliestTrip(time)}" \
             }}'
 
 
@@ -88,9 +88,17 @@ class MessageSentLogs:
 
 class Message:
     def __init__(self, sourceName, destinationName, requestType, time, timestamp):
-        self.sourceName = sourceName
+        self.sourceName = '"' + sourceName + '"'
+        if destinationName == None:
+            destinationName = '""'
+        else:
+            destinationName = '"' + destinationName + '"'
         self.destinationName = destinationName
         self.route = []
+        if requestType == None:
+            requestType = '""'
+        else:
+            requestType = '"' + requestType + '"'
         self.requestType = requestType
         self.hopCount = 1  # set hop count to 1 initially
         self.time = time
@@ -104,14 +112,14 @@ class Message:
         string = "["
         for item in self.route:
             string += str(item) + ", "
-        string + "]"
+        string = string + "]"
         return string
 
     def __str__(self):
         return f'{{ "sourceName" : {self.sourceName} , \
                     "destinationName" : {self.destinationName} , \
-                    "route": {self.getRouteString()} \
-                    "requestType": {self.requestType} \
+                    "route": {self.getRouteString()}, \
+                    "requestType": {self.requestType}, \
                     "hopCount": {self.hopCount} \
              }}'
 
@@ -189,6 +197,7 @@ def getRequestObject(request_body):
     for item in request_body:
         pair = item.split("=")
         request_body_objects.append({pair[0]: pair[1]})
+    print(f"Request object: {request_body_objects}")
     return request_body_objects
 
 
@@ -209,13 +218,16 @@ def send_udp(key, mask, sel, station, msg, udpServerSocket):
 
 
 def get_message_to_send(requestObject, station):
+    destination = ""
+    time = ""
+    requestType = ""
     for item in requestObject:
-        if item.get("station") != "":
+        if item.get("station") != None:
             destination = item.get("station")
-        if item.get("time") != "":
+        if item.get("time") != None:
             time = str(item.get("time"))
             time = urllib.parse.unquote(time)
-        if item.get("requestType") != "":
+        if item.get("requestType") != None:
             requestType = item.get("requestType")
     timestamp = ts.time()
     message = Message(station.stationName,
@@ -305,11 +317,10 @@ def serviceUdpCommunication(key, mask, sel, station, udpServerSocket):
     clientIP = f"Client IP Address:{address}"
     print(clientMsg)
     print(clientIP)
-    for record in message:
-        if record.get("station") != None:
-            print(f"station: {record.get('station')}")
-            #         # udpServerSocket.sendto(
-            #         #     "Hello from server.".encode(), address)
+
+    print(f"sourceName: {message.get('sourceName')}")
+    #         # udpServerSocket.sendto(
+    #         #     "Hello from server.".encode(), address)
 
 
 def serveTcpUdpPort(station, sel, tcpServerSocket, udpServerSocket):
