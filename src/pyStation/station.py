@@ -5,6 +5,8 @@ import sys
 import csv
 import pathlib
 import json
+import time as ts
+import urllib
 
 # CONSTANTS
 SERVER = "127.0.0.1"
@@ -13,7 +15,7 @@ FORMAT = "UTF-8"
 
 class Station:
     def __init__(self, station, tcp_port, udp_port):
-        self.StationName = station
+        self.stationName = station
         self.HeaderSize = 64
         self.tcp_port = tcp_port
         self.udp_port = udp_port
@@ -47,17 +49,17 @@ class Station:
     def getStationTCPAddress(self):
         return f"http://{self.server}:{self.tcp_port}"
 
-    def getStationShortObject(self, timestamp):
-        return f'{{ "StationName" : {self.StationName} , \
-                    "Timestamp" : {timestamp} , \
-                    "StationUDPAddress": , \
-            }}'
+    def getEarliestTrip(self, time):
+        for timetableRecord in self.timetable:
+            if time >= timetableRecord[0]:
+                return timetableRecord[0]
 
-    def getMessage(self, requestedTime, destination, requestType):
-        return f'{{ "Source" : {self.StationName} , \
-                    "Destination" : {destination} , \
-                    "Route":[] \
-             }}'
+    def getStationString(self, timestamp, time):
+        return f'{{ "stationName" : {self.stationName} , \
+                    "timestamp" : {timestamp} , \
+                    "stationUDPAddress": {self.getStationUDPAddress()}, \
+                    "earliestTrip": {self.getEarliestTrip(time)} \
+            }}'
 
 
 class MessageSentLog:
@@ -85,16 +87,20 @@ class MessageSentLogs:
 
 
 class Message:
-    def __init__(self, sourceName, destinationName, numberHops):
+    def __init__(self, sourceName, destinationName, requestType, time, timestamp):
         self.sourceName = sourceName
         self.destinationName = destinationName
         self.route = []
-        self.numberHops = numberHops
+        self.requestType = requestType
+        self.hopCount = 1  # set hop count to 1 initially
+        self.time = time
+        self.timestamp = timestamp
 
     def addRoute(self, station):
-        self.route.append(station)
+        stationString = station.getStationString(self.timestamp, self.time)
+        self.route.append(stationString)
 
-    def convertRouteToString(self):
+    def getRouteString(self):
         string = "["
         for item in self.route:
             string += str(item) + ", "
@@ -102,11 +108,11 @@ class Message:
         return string
 
     def __str__(self):
-        route = self.convertRouteToString()
         return f'{{ "sourceName" : {self.sourceName} , \
                     "destinationName" : {self.destinationName} , \
-                    "route": {route} \
-                    "numberHops": {self.numberHops} \
+                    "route": {self.getRouteString()} \
+                    "requestType": {self.requestType} \
+                    "hopCount": {self.hopCount} \
              }}'
 
 
@@ -114,6 +120,7 @@ html_content = """
 <!DOCTYPE html>
 <html>
     <head>
+        <meta charset="utf-8"/>
         <title>Transperth Journey Planner</title>
         <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
         <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css" integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh" crossorigin="anonymous">
@@ -189,9 +196,9 @@ def send_udp(key, mask, sel, station, msg, udpServerSocket):
     neighbours = station.neighbours
     # msg = json.dumps(msg)
     msg = str(msg).replace("'", '"')
-    message = msg.encode(format)
+    message = msg.encode(FORMAT)
     msg_length = len(message)
-    send_length = str(msg_length).encode(format)
+    send_length = str(msg_length).encode(FORMAT)
     send_length += b" " * (station.HeaderSize - len(send_length))
 
     # send to each neighbour
@@ -205,8 +212,17 @@ def get_message_to_send(requestObject, station):
     for item in requestObject:
         if item.get("station") != "":
             destination = item.get("station")
-    message = Message(station.StationName,
-                      destination)
+        if item.get("time") != "":
+            time = str(item.get("time"))
+            time = urllib.parse.unquote(time)
+        if item.get("requestType") != "":
+            requestType = item.get("requestType")
+    timestamp = ts.time()
+    message = Message(station.stationName,
+                      destination,
+                      requestType,
+                      time,
+                      timestamp)
     message.addRoute(station)
     return message
 
@@ -219,7 +235,7 @@ def service_tcp_connection(key, mask, sel, station, udpServerSocket):
     # if the socket is ready for reading -- mask is True & selectors.EVENT_READ is True
     if mask & selectors.EVENT_READ:
         # receive the data
-        recv_data = sock.recv(1024).decode(format)
+        recv_data = sock.recv(1024).decode(FORMAT)
         if recv_data:  # if recv_data is not None
             request = True
             method = recv_data.split()[0]
@@ -245,7 +261,7 @@ def service_tcp_connection(key, mask, sel, station, udpServerSocket):
                 sendData = "HTTP/1.1 200 OK\r\n"
                 sendData += "Content-Type: text/html; charset=utf-8\r\n"
                 sendData += "\r\n"
-                sendData += html_content.format(station=station.StationName,
+                sendData += html_content.format(station=station.stationName,
                                                 timetable=station.timetable,
                                                 address=data.addr,
                                                 stationTcpAddress=station.getStationTCPAddress())
@@ -372,7 +388,7 @@ def read_timetable(filepath):
 def main(argv):
     # store config and neighbours from inputs
     station = acceptInputs(argv)
-    print(f"Station Name: {station.StationName}")
+    print(f"Station Name: {station.stationName}")
     print(f"tcp_address: {station.tcp_address}")
     print(f"udp_address: {station.udp_address}")
     print(f"Neighbour station: {station.neighbours}")
@@ -380,7 +396,7 @@ def main(argv):
     # TODO: ability to detect that a timetable file has changed, to delete/dispose of the previous information, and move to using the new information
     # Read CSV timetable file -- assume that all contents are correct
     path = str(pathlib.Path(__file__).parent.absolute()).replace(
-        "\src\pyStation", f"\datafiles\\tt-{station.StationName}")
+        "\src\pyStation", f"\datafiles\\tt-{station.stationName}")
     print(path)
     timetable, stationCoordinates = read_timetable(path)
     station.addCoordinates(
