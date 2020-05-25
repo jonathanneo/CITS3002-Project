@@ -9,26 +9,18 @@ import json
 # CONSTANTS
 SERVER = "127.0.0.1"
 FORMAT = "UTF-8"
-DEFAULT_HOPS = 20
-
-# class TimetableRecord:
-#     def __init__(self, departureTime, depatureLocation, arrivalTime, arrivalLocation):
-#         self.departureTime = departureTime
-#         self.depatureLocation = depatureLocation
-#         self.arrivalTime = arrivalTime
-#         self.arrivalLocation = arrivalLocation
 
 
-class StationConfig:
+class Station:
     def __init__(self, station, tcp_port, udp_port):
-        self.STATION = station
-        self.HEADER = 64
-        self.TCP_PORT = tcp_port
-        self.UDP_PORT = udp_port
-        self.SERVER = SERVER
-        self.TCP_ADDR = (self.SERVER, self.TCP_PORT)
-        self.UDP_ADDR = (self.SERVER, self.UDP_PORT)
-        self.FORMAT = FORMAT
+        self.StationName = station
+        self.HeaderSize = 64
+        self.tcp_port = tcp_port
+        self.udp_port = udp_port
+        self.server = SERVER
+        self.tcp_address = (self.server, self.tcp_port)
+        self.udp_address = (self.server, self.udp_port)
+        self.format = FORMAT
 
     def addCoordinates(self, x, y):
         self.x = x
@@ -40,7 +32,7 @@ class StationConfig:
     def addNeighbour(self, neighbours):
         self.neighbours = []
         for neighbour in neighbours:
-            self.neighbours.append((self.SERVER, int(neighbour)))
+            self.neighbours.append((self.server, int(neighbour)))
 
     def convertTimetableToString(self):
         string = "["
@@ -49,18 +41,22 @@ class StationConfig:
         string + "]"
         return string
 
-    def __str__(self):
-        timetable = self.convertTimetableToString()
-        return f'{{ "STATION" : {self.STATION} , \
-                    "HEADER" : {self.HEADER} , \
-                    "TCP_PORT" : {self.TCP_PORT} , \
-                    "UDP_PORT" : {self.UDP_PORT} , \
-                    "SERVER" : {self.SERVER} , \
-                    "TCP_ADDR" : {self.TCP_ADDR} , \
-                    "UDP_ADDR" : {self.UDP_ADDR} , \
-                    "x" : {self.x} , \
-                    "y" : {self.y} , \
-                    "timetable" : {timetable} , \
+    def getStationUDPAddress(self):
+        return f"http://{self.server}:{self.udp_port}"
+
+    def getStationTCPAddress(self):
+        return f"http://{self.server}:{self.tcp_port}"
+
+    def getStationShortObject(self, timestamp):
+        return f'{{ "StationName" : {self.StationName} , \
+                    "Timestamp" : {timestamp} , \
+                    "StationUDPAddress": , \
+            }}'
+
+    def getMessage(self, requestedTime, destination, requestType):
+        return f'{{ "Source" : {self.StationName} , \
+                    "Destination" : {destination} , \
+                    "Route":[] \
              }}'
 
 
@@ -114,14 +110,6 @@ class Message:
              }}'
 
 
-# class TcpMessage:
-#     def __init__(self, requestList):
-#         for item in requestList:
-#             if item.get("station") != None:
-#                 self.station = item.get("station")
-#             if item.get("")
-
-
 html_content = """
 <!DOCTYPE html>
 <html>
@@ -134,7 +122,7 @@ html_content = """
         <div class="container">
             <h1>Welcome to {station}</h1><br>
             Hello {address} <br>
-            <form action="http://{host}:{port}" method="POST">
+            <form action="{stationTcpAddress}" method="POST">
                 <div>
                     <label for="station">What station would you like to go to?</label>
                     <input name="station" id="station" class="form-control">
@@ -197,14 +185,14 @@ def getRequestObject(request_body):
     return request_body_objects
 
 
-def send_udp(key, mask, sel, stationConfig, msg, udpServerSocket):
-    neighbours = stationConfig.neighbours
+def send_udp(key, mask, sel, station, msg, udpServerSocket):
+    neighbours = station.neighbours
     # msg = json.dumps(msg)
     msg = str(msg).replace("'", '"')
-    message = msg.encode(FORMAT)
+    message = msg.encode(format)
     msg_length = len(message)
-    send_length = str(msg_length).encode(FORMAT)
-    send_length += b" " * (stationConfig.HEADER - len(send_length))
+    send_length = str(msg_length).encode(format)
+    send_length += b" " * (station.HeaderSize - len(send_length))
 
     # send to each neighbour
     for neighbour in neighbours:
@@ -213,17 +201,17 @@ def send_udp(key, mask, sel, stationConfig, msg, udpServerSocket):
         udpServerSocket.sendto(message, neighbour)
 
 
-def get_message_to_send(requestObject, stationConfig):
+def get_message_to_send(requestObject, station):
     for item in requestObject:
         if item.get("station") != "":
             destination = item.get("station")
-    message = Message(stationConfig.STATION,
-                      destination, DEFAULT_HOPS)
-    message.addRoute(stationConfig)
+    message = Message(station.StationName,
+                      destination)
+    message.addRoute(station)
     return message
 
 
-def service_tcp_connection(key, mask, sel, stationConfig, udpServerSocket):
+def service_tcp_connection(key, mask, sel, station, udpServerSocket):
     request = False
     method = "GET"
     sock = key.fileobj
@@ -231,7 +219,7 @@ def service_tcp_connection(key, mask, sel, stationConfig, udpServerSocket):
     # if the socket is ready for reading -- mask is True & selectors.EVENT_READ is True
     if mask & selectors.EVENT_READ:
         # receive the data
-        recv_data = sock.recv(1024).decode(FORMAT)
+        recv_data = sock.recv(1024).decode(format)
         if recv_data:  # if recv_data is not None
             request = True
             method = recv_data.split()[0]
@@ -241,9 +229,9 @@ def service_tcp_connection(key, mask, sel, stationConfig, udpServerSocket):
             if method == "POST":
                 # send message
                 requestObject = getRequestObject(requestBody)
-                msg = get_message_to_send(requestObject, stationConfig)
+                msg = get_message_to_send(requestObject, station)
                 print(f"Message to send: {msg}")
-                send_udp(key, mask, sel, stationConfig,
+                send_udp(key, mask, sel, station,
                          msg, udpServerSocket)
 
         else:  # the client has closed their socket so the server should too.
@@ -257,41 +245,39 @@ def service_tcp_connection(key, mask, sel, stationConfig, udpServerSocket):
                 sendData = "HTTP/1.1 200 OK\r\n"
                 sendData += "Content-Type: text/html; charset=utf-8\r\n"
                 sendData += "\r\n"
-                sendData += html_content.format(station=stationConfig.STATION,
-                                                timetable=stationConfig.timetable,
+                sendData += html_content.format(station=station.StationName,
+                                                timetable=station.timetable,
                                                 address=data.addr,
-                                                host=key.fileobj.getsockname()[
-                                                    0],
-                                                port=key.fileobj.getsockname()[1])
+                                                stationTcpAddress=station.getStationTCPAddress())
                 sock.send(sendData.encode())
                 request = False  # request fulfiled
                 sel.unregister(sock)
                 sock.close()
 
 
-def startTcpPort(stationConfig, sel):
+def startTcpPort(station, sel):
     # create TCP server socket
     tcpServerSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    tcpServerSocket.bind(stationConfig.TCP_ADDR)
+    tcpServerSocket.bind(station.tcp_address)
     tcpServerSocket.listen()
-    print(f"[LISTENING] TCP Server is listening on {stationConfig.TCP_ADDR}.")
+    print(f"[LISTENING] TCP Server is listening on {station.tcp_address}.")
     tcpServerSocket.setblocking(False)
     sel.register(tcpServerSocket, selectors.EVENT_READ, data=None)
     return tcpServerSocket
 
 
-def startUdpPort(stationConfig, sel):
+def startUdpPort(station, sel):
     # create UDP server socket
     udpServerSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    udpServerSocket.bind(stationConfig.UDP_ADDR)
-    print(f"[LISTENING] UDP Server is listening on {stationConfig.UDP_ADDR}.")
+    udpServerSocket.bind(station.udp_address)
+    print(f"[LISTENING] UDP Server is listening on {station.udp_address}.")
     sel.register(udpServerSocket, selectors.EVENT_READ, data=None)
     return udpServerSocket
 
 
-def serviceUdpCommunication(key, mask, sel, stationConfig, udpServerSocket):
+def serviceUdpCommunication(key, mask, sel, station, udpServerSocket):
     bytesAddressPair = udpServerSocket.recvfrom(
-        stationConfig.HEADER)
+        station.HeaderSize)
     message_length = bytesAddressPair[0].decode()
     bytesAddressPair = udpServerSocket.recvfrom(
         int(message_length))
@@ -310,7 +296,7 @@ def serviceUdpCommunication(key, mask, sel, stationConfig, udpServerSocket):
             #         #     "Hello from server.".encode(), address)
 
 
-def serveTcpUdpPort(stationConfig, sel, tcpServerSocket, udpServerSocket):
+def serveTcpUdpPort(station, sel, tcpServerSocket, udpServerSocket):
     # wait for connection
     try:
         while True:
@@ -327,24 +313,24 @@ def serveTcpUdpPort(stationConfig, sel, tcpServerSocket, udpServerSocket):
                 if key.data is None:
 
                     # if the listening socket is TCP
-                    if key.fileobj.getsockname() == stationConfig.TCP_ADDR:
+                    if key.fileobj.getsockname() == station.tcp_address:
                         # print("TCP accept wrapper!")
                         accept_tcp_wrapper(key.fileobj, sel)
 
                     # if the listening socket is UDP
-                    if key.fileobj.getsockname() == stationConfig.UDP_ADDR:
+                    if key.fileobj.getsockname() == station.udp_address:
                         serviceUdpCommunication(
-                            key, mask, sel, stationConfig, udpServerSocket)
+                            key, mask, sel, station, udpServerSocket)
 
                 # a client socket that has been accepted and now we need to service it i.e. has data
                 else:
-                    if key.fileobj.getsockname() == stationConfig.TCP_ADDR:
+                    if key.fileobj.getsockname() == station.tcp_address:
                         # print("TCP service connection!")
                         service_tcp_connection(
-                            key, mask, sel, stationConfig, udpServerSocket)
+                            key, mask, sel, station, udpServerSocket)
 
             # conn, addr = tcpServerSocket.accept()  # accept new connection
-            # handleTcpClient(stationConfig, conn, addr)
+            # handleTcpClient(station, conn, addr)
     except KeyboardInterrupt:
         print("Caught keyboard interrupt, exiting")
     finally:
@@ -360,11 +346,11 @@ def acceptInputs(argv):
     stationTcpPort = int(argv[1])  # e.g. tcp_port = 5050
     stationUdpPort = int(argv[2])  # e.g. udp_port = 6060
 
-    stationConfig = StationConfig(stationName, stationTcpPort, stationUdpPort)
+    station = Station(stationName, stationTcpPort, stationUdpPort)
     neighbourStation = argv[3:]
-    stationConfig.addNeighbour(neighbourStation)
+    station.addNeighbour(neighbourStation)
 
-    return stationConfig
+    return station
 
 
 def read_timetable(filepath):
@@ -385,34 +371,34 @@ def read_timetable(filepath):
 
 def main(argv):
     # store config and neighbours from inputs
-    stationConfig = acceptInputs(argv)
-    print(f"Station Name: {stationConfig.STATION}")
-    print(f"TCP_ADDR: {stationConfig.TCP_ADDR}")
-    print(f"UDP_ADDR: {stationConfig.UDP_ADDR}")
-    print(f"Neighbour station: {stationConfig.neighbours}")
+    station = acceptInputs(argv)
+    print(f"Station Name: {station.StationName}")
+    print(f"tcp_address: {station.tcp_address}")
+    print(f"udp_address: {station.udp_address}")
+    print(f"Neighbour station: {station.neighbours}")
 
     # TODO: ability to detect that a timetable file has changed, to delete/dispose of the previous information, and move to using the new information
     # Read CSV timetable file -- assume that all contents are correct
     path = str(pathlib.Path(__file__).parent.absolute()).replace(
-        "\src\pyStation", f"\datafiles\\tt-{stationConfig.STATION}")
+        "\src\pyStation", f"\datafiles\\tt-{station.StationName}")
     print(path)
     timetable, stationCoordinates = read_timetable(path)
-    stationConfig.addCoordinates(
+    station.addCoordinates(
         float(stationCoordinates[1]), float(stationCoordinates[2]))  # add coordinates
-    print(f"X: {stationConfig.x} | Y : {stationConfig.y} ")
-    stationConfig.addTimetable(timetable)
+    print(f"X: {station.x} | Y : {station.y} ")
+    station.addTimetable(timetable)
     print("timetable: ")
-    svrTimetable = stationConfig.timetable
+    svrTimetable = station.timetable
     for row in svrTimetable:
         print(row)
     # Create selector
     sel = selectors.DefaultSelector()
     # Start TCP port
-    tcpServerSocket = startTcpPort(stationConfig, sel)
+    tcpServerSocket = startTcpPort(station, sel)
     # Start UDP port
-    udpServerSocket = startUdpPort(stationConfig, sel)
+    udpServerSocket = startUdpPort(station, sel)
     # Serve TCP and UDP ports
-    serveTcpUdpPort(stationConfig, sel, tcpServerSocket, udpServerSocket)
+    serveTcpUdpPort(station, sel, tcpServerSocket, udpServerSocket)
     # TODO: Design and implementation of a simple programming language independent protocol to exchange queries,
     # responses, and (possibly) control information between stations.
     # TODO: Ability to find a valid (but not necessarily optimal) route between origin and destination stations,
