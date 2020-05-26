@@ -20,12 +20,19 @@ class Station:
     def __init__(self, station, tcp_port, udp_port):
         self.stationName = station
         self.HeaderSize = HEADER_SIZE
-        self.tcp_port = tcp_port
-        self.udp_port = udp_port
+        if tcp_port == None:
+            self.tcp_port = 0
+        else:
+            self.tcp_port = int(tcp_port)
+        if udp_port == None:
+            self.udp_port = 0
+        else:
+            self.udp_port = int(udp_port)
         self.server = SERVER
         self.tcp_address = (self.server, self.tcp_port)
         self.udp_address = (self.server, self.udp_port)
         self.format = FORMAT
+        self.neighbours = []
 
     def addCoordinates(self, x, y):
         self.x = x
@@ -34,10 +41,8 @@ class Station:
     def addTimetable(self, timetable):
         self.timetable = timetable
 
-    def addNeighbour(self, neighbours):
-        self.neighbours = []
-        for neighbour in neighbours:
-            self.neighbours.append((self.server, int(neighbour)))
+    def addNeighbour(self, neighbour):
+        self.neighbours.append(neighbour)
 
     def convertTimetableToString(self):
         string = "["
@@ -69,14 +74,18 @@ class Station:
 
 
 class MessageSentLog:
-    def __init__(self, timestamp, parentStation, parentAddress, station, stationAddress, destinationStation, destinationStationAddress):
-        self.timestamp = timestamp
-        self.parentStation = parentStation
-        self.parentAddress = parentAddress
-        self.station = station
-        self.stationAddress = stationAddress
-        self.destinationStation = destinationStation
-        self.destinationStationAddress = destinationStationAddress
+    def __init__(self, timestamp, parentAddress, stationAddress, destinationStationAddress):
+        self.timestamp = str(timestamp)
+        self.parentAddress = str(parentAddress)
+        self.stationAddress = str(stationAddress)
+        self.destinationStationAddress = str(destinationStationAddress)
+
+    def __str__(self):
+        return f'{{ "timestamp" : {self.timestamp}, \
+                    "parentAddress" : {self.parentAddress}, \
+                    "stationAddress" : {self.stationAddress}, \
+                    "destinationStationAddress" : {self.destinationStationAddress} \
+            }}'
 
 
 class MessageSentLogs:
@@ -88,7 +97,7 @@ class MessageSentLogs:
 
     def removeLog(self, destinationAddress, timestamp):
         for log in self.logs:
-            if log.destinationAddress == destinationAddress and log.timestamp == timestamp:
+            if log.destinationAddress == str(destinationAddress) and log.timestamp == str(timestamp):
                 self.logs.remove(log)
 
 
@@ -206,10 +215,6 @@ def accept_tcp_wrapper(sock, sel):
 
 def getRequestBody(request_array):
     return str(request_array[0]).split(" ")[1].replace("/?", "")
-    # for index, item in enumerate(request_array):
-    #     print(f"{index} || {item}")
-    # if item == "":
-    #     return request_array[index+1]
 
 
 def getRequestObject(request_body):
@@ -222,23 +227,32 @@ def getRequestObject(request_body):
     return request_body_objects
 
 
-def send_udp(key, mask, sel, station, msg, udpServerSocket):
+def send_udp(key, mask, sel, station, requestObject, udpServerSocket, messageSentLogs):
     neighbours = station.neighbours
+    timestamp = ts.time()
+    msg = get_message_to_send(requestObject, station, timestamp)
+    print(f"Message to send: {msg}")
     # msg = json.dumps(msg)
-    msg = str(msg).replace("'", '"')
-    message = msg.encode(FORMAT)
+    msg_clean = str(msg).replace("'", '"')
+    message = msg_clean.encode(FORMAT)
     msg_length = len(message)
     send_length = str(msg_length).encode(FORMAT)
     send_length += b" " * (station.HeaderSize - len(send_length))
 
     # send to each neighbour
     for neighbour in neighbours:
-        print(f"neighbour: {neighbour}")
-        udpServerSocket.sendto(send_length, neighbour)
-        udpServerSocket.sendto(message, neighbour)
+        newLog = MessageSentLog(
+            timestamp, "", station.getStationUDPAddress(), neighbour.getStationUDPAddress())
+        messageSentLogs.addLog(newLog)
+        print(f"neighbour: {neighbour.udp_address}")
+        udpServerSocket.sendto(send_length, neighbour.udp_address)
+        udpServerSocket.sendto(message, neighbour.udp_address)
+
+    for index, log in enumerate(messageSentLogs.logs):
+        print(f"Log index: {index} || {str(log)}")
 
 
-def get_message_to_send(requestObject, station):
+def get_message_to_send(requestObject, station, timestamp):
     destination = ""
     time = ""
     tripType = ""
@@ -250,7 +264,6 @@ def get_message_to_send(requestObject, station):
             time = urllib.parse.unquote(time)
         if item.get("tripType") != None:
             tripType = item.get("tripType")
-    timestamp = ts.time()
     message = Message(station.stationName,
                       destination,
                       tripType,
@@ -260,7 +273,7 @@ def get_message_to_send(requestObject, station):
     return message
 
 
-def service_tcp_connection(key, mask, sel, station, udpServerSocket):
+def service_tcp_connection(key, mask, sel, station, udpServerSocket, messageSentLogs):
     request = False
     method = "GET"
     sock = key.fileobj
@@ -278,10 +291,8 @@ def service_tcp_connection(key, mask, sel, station, udpServerSocket):
             if "station" in requestBody:
                 # send message
                 requestObject = getRequestObject(requestBody)
-                msg = get_message_to_send(requestObject, station)
-                print(f"Message to send: {msg}")
                 send_udp(key, mask, sel, station,
-                         msg, udpServerSocket)
+                         requestObject, udpServerSocket, messageSentLogs)
 
         else:  # the client has closed their socket so the server should too.
             print('closing connection to', data.addr)
@@ -324,7 +335,7 @@ def startUdpPort(station, sel):
     return udpServerSocket
 
 
-def serviceUdpCommunication(key, mask, sel, station, udpServerSocket):
+def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSentLogs):
     bytesAddressPair = udpServerSocket.recvfrom(
         station.HeaderSize)
     message_length = bytesAddressPair[0].decode()
@@ -344,7 +355,7 @@ def serviceUdpCommunication(key, mask, sel, station, udpServerSocket):
     #         #     "Hello from server.".encode(), address)
 
 
-def serveTcpUdpPort(station, sel, tcpServerSocket, udpServerSocket):
+def serveTcpUdpPort(station, sel, tcpServerSocket, udpServerSocket, messageSentLogs):
     # wait for connection
     try:
         while True:
@@ -368,14 +379,14 @@ def serveTcpUdpPort(station, sel, tcpServerSocket, udpServerSocket):
                     # if the listening socket is UDP
                     if key.fileobj.getsockname() == station.udp_address:
                         serviceUdpCommunication(
-                            key, mask, sel, station, udpServerSocket)
+                            key, mask, sel, station, udpServerSocket, messageSentLogs)
 
                 # a client socket that has been accepted and now we need to service it i.e. has data
                 else:
                     if key.fileobj.getsockname() == station.tcp_address:
                         # print("TCP service connection!")
                         service_tcp_connection(
-                            key, mask, sel, station, udpServerSocket)
+                            key, mask, sel, station, udpServerSocket, messageSentLogs)
 
             # conn, addr = tcpServerSocket.accept()  # accept new connection
             # handleTcpClient(station, conn, addr)
@@ -391,12 +402,15 @@ def acceptInputs(argv):
         sys.exit(2)
 
     stationName = argv[0]
-    stationTcpPort = int(argv[1])  # e.g. tcp_port = 5050
-    stationUdpPort = int(argv[2])  # e.g. udp_port = 6060
+    stationTcpPort = argv[1]  # e.g. tcp_port = 5050
+    stationUdpPort = argv[2]  # e.g. udp_port = 6060
 
     station = Station(stationName, stationTcpPort, stationUdpPort)
-    neighbourStation = argv[3:]
-    station.addNeighbour(neighbourStation)
+    # create neighbour stations
+    neighbourStationsUDP = argv[3:]
+    for neighbourStationUDP in neighbourStationsUDP:
+        neighbourStation = Station("", None, neighbourStationUDP)
+        station.addNeighbour(neighbourStation)
 
     return station
 
@@ -425,7 +439,6 @@ def main(argv):
     print(f"udp_address: {station.udp_address}")
     print(f"Neighbour station: {station.neighbours}")
 
-    # TODO: ability to detect that a timetable file has changed, to delete/dispose of the previous information, and move to using the new information
     # Read CSV timetable file -- assume that all contents are correct
     path = str(pathlib.Path(__file__).parent.absolute()).replace(
         "\src\pyStation", f"\datafiles\\tt-{station.stationName}")
@@ -445,14 +458,21 @@ def main(argv):
     tcpServerSocket = startTcpPort(station, sel)
     # Start UDP port
     udpServerSocket = startUdpPort(station, sel)
+    # create new message sent logs object to hold messages sent from the server
+    messageSentLogs = MessageSentLogs()
     # Serve TCP and UDP ports
-    serveTcpUdpPort(station, sel, tcpServerSocket, udpServerSocket)
+    serveTcpUdpPort(station, sel, tcpServerSocket,
+                    udpServerSocket, messageSentLogs)
     # TODO: Design and implementation of a simple programming language independent protocol to exchange queries,
     # responses, and (possibly) control information between stations.
     # TODO: Ability to find a valid (but not necessarily optimal) route between origin and destination stations,
     # for varying sized transport-networks of 2, 3, 5, 10, and 20 stations (including transport-networks involving cycles),
     # with no station attempting to collate information about the whole transport-network; ability to support multiple, concurrent queries from different clients.
     # TODO: Ability to detect and report when a valid route does not exist (on the current day).
+    # TODO: look into JSON encoding issue: https://stackoverflow.com/questions/5160077/encoding-nested-python-object-in-json
+    # TODO: check if timetable file has updated using stat()
+    # TODO: Remove instant transit
+
     return None
 
 
