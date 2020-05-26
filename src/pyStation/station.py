@@ -57,20 +57,36 @@ class Station:
     def getStationTCPAddress(self):
         return f"http://{self.server}:{self.tcp_port}"
 
-    def getEarliestTrip(self, time):
+    def convertListToString(self, list):
+        string = "["
+        for item in list:
+            string += str(item) + ", "
+        string = string + "]"
+        return string
+
+    def getEarliestTrips(self, time):
+        earliestTrips = []
         for timetableRecord in self.timetable:
             timeValue = datetime.strptime(time, "%H:%M")
-            timetableRecordValue = datetime.strptime(
+            timetableRecordTime = datetime.strptime(
                 timetableRecord[0], "%H:%M")
-            if timetableRecordValue >= timeValue:
-                return timetableRecord[0], timetableRecord[3]
+            timetableRecordDestination = timetableRecord[4]
+            if len(earliestTrips) == 0:
+                if timetableRecordTime >= timeValue:
+                    earliestTrips.append(
+                        timetableRecord)
+            else:
+                for trips in earliestTrips:
+                    if timetableRecordTime >= timeValue and trips[4] != timetableRecordDestination:
+                        earliestTrips.append(
+                            timetableRecord)
+        return earliestTrips
 
     def getStationString(self, timestamp, time):
         return f'{{ "stationName" : "{self.stationName}", \
                     "timestamp" : "{timestamp}" , \
                     "stationUDPAddress": "{self.getStationUDPAddress()}", \
-                    "depart": "{self.getEarliestTrip(time)[0]}" \
-                    "arrive": "{self.getEarliestTrip(time)[1]}" \
+                    "earliestTrips": {self.getEarliestTrips(time)} \
             }}'
 
 
@@ -103,7 +119,7 @@ class MessageSentLogs:
 
 
 class Message:
-    def __init__(self, sourceName, destinationName, tripType, time, timestamp):
+    def __init__(self, sourceName, destinationName, tripType, time, timestamp, messageType):
         self.sourceName = '"' + sourceName + '"'
         if destinationName == None:
             destinationName = '""'
@@ -119,9 +135,11 @@ class Message:
         self.hopCount = 0  # set hop count to 0 initially
         self.time = time
         self.timestamp = timestamp
+        self.messageType = messageType
 
     def addRoute(self, station):
         stationString = station.getStationString(self.timestamp, self.time)
+        print(f"station String: {stationString}")
         self.route.append(stationString)
 
     def getRouteString(self):
@@ -136,7 +154,8 @@ class Message:
                     "destinationName" : {self.destinationName} , \
                     "route": {self.getRouteString()}, \
                     "tripType": {self.tripType}, \
-                    "hopCount": {self.hopCount} \
+                    "hopCount": {self.hopCount}, \
+                    "messageType":{self.messageType} \
              }}'
 
 
@@ -255,6 +274,7 @@ def get_message_to_send(requestObject, station, timestamp):
     destination = ""
     time = ""
     tripType = ""
+    messageType = "outgoing"  # either outgoing or incoming
     for item in requestObject:
         if item.get("station") != None:
             destination = item.get("station")
@@ -267,20 +287,19 @@ def get_message_to_send(requestObject, station, timestamp):
                       destination,
                       tripType,
                       time,
-                      timestamp)
+                      timestamp,
+                      messageType)
     message.addRoute(station)
     return message
 
 
-def getDestinationTimetable(station, msg):
-    destinationName = msg.destinationName.strip("\"")
-    print(station.timetable)
-    for record in station.timetable:
-        print(f"destination name: {destinationName}")
-        print(f"timetable destination name: {record[4]}")
-        if str(record[4]) == destinationName:
-            print(
-                f"departing from {station.stationName}, departing at: {record[0]}")
+def destinationFound(station, msg):
+    destinationName = msg.destinationName.strip(
+        "\"")  # strip " from destination name
+    for trip in station.getEarliestTrips(msg.time):
+        if trip[4] == destinationName:
+            return True, trip
+    return False, []
 
 
 def service_tcp_connection(key, mask, sel, station, udpServerSocket, messageSentLogs):
@@ -304,11 +323,18 @@ def service_tcp_connection(key, mask, sel, station, udpServerSocket, messageSent
                 # Create message
                 timestamp = ts.time()
                 msg = get_message_to_send(requestObject, station, timestamp)
+                print("Obtained message!")
                 # Check if message destination matches timetable destinations
-                getDestinationTimetable(station, msg)
-                # Send message
-                # send_udp(key, mask, sel, station,
-                #          msg, udpServerSocket, messageSentLogs)
+                destFound, earliestTrip = destinationFound(station, msg)
+                if destFound:
+                    print("Destination found!")
+                    print(earliestTrip)
+
+                if not destFound:
+                    a = 0
+                    # Send message
+                    # send_udp(key, mask, sel, station,
+                    #          msg, udpServerSocket, messageSentLogs)
 
         else:  # the client has closed their socket so the server should too.
             print('closing connection to', data.addr)
