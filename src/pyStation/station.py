@@ -463,6 +463,12 @@ def main(argv):
     # Serve TCP and UDP ports
     serveTcpUdpPort(station, sel, tcpServerSocket,
                     udpServerSocket, messageSentLogs)
+    # TODO: 1) Create the message when a new TCP client request is received
+    # 2) check if destination matches the timetable records. If so, get the earliest time.
+    # 3) if current station is the source, then respond back to client. Else if station is not source, then send message back to parent.
+    # 4) if destination doesn't match, then forward on the message to neighbours (append station object to message route[]), but not to the parent.
+
+    # TODO: if neighbour == destination, then use timing based on timetable
     # TODO: Design and implementation of a simple programming language independent protocol to exchange queries,
     # responses, and (possibly) control information between stations.
     # TODO: Ability to find a valid (but not necessarily optimal) route between origin and destination stations,
