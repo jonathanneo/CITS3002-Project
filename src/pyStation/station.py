@@ -63,13 +63,14 @@ class Station:
             timetableRecordValue = datetime.strptime(
                 timetableRecord[0], "%H:%M")
             if timetableRecordValue >= timeValue:
-                return timetableRecord[0]
+                return timetableRecord[0], timetableRecord[3]
 
     def getStationString(self, timestamp, time):
         return f'{{ "stationName" : "{self.stationName}", \
                     "timestamp" : "{timestamp}" , \
                     "stationUDPAddress": "{self.getStationUDPAddress()}", \
-                    "earliestTrip": "{self.getEarliestTrip(time)}" \
+                    "depart": "{self.getEarliestTrip(time)[0]}" \
+                    "arrive": "{self.getEarliestTrip(time)[1]}" \
             }}'
 
 
@@ -115,7 +116,7 @@ class Message:
         else:
             tripType = '"' + tripType + '"'
         self.tripType = tripType
-        self.hopCount = 1  # set hop count to 1 initially
+        self.hopCount = 0  # set hop count to 0 initially
         self.time = time
         self.timestamp = timestamp
 
@@ -227,10 +228,8 @@ def getRequestObject(request_body):
     return request_body_objects
 
 
-def send_udp(key, mask, sel, station, requestObject, udpServerSocket, messageSentLogs):
+def send_udp(key, mask, sel, station, msg, udpServerSocket, messageSentLogs):
     neighbours = station.neighbours
-    timestamp = ts.time()
-    msg = get_message_to_send(requestObject, station, timestamp)
     print(f"Message to send: {msg}")
     # msg = json.dumps(msg)
     msg_clean = str(msg).replace("'", '"')
@@ -242,7 +241,7 @@ def send_udp(key, mask, sel, station, requestObject, udpServerSocket, messageSen
     # send to each neighbour
     for neighbour in neighbours:
         newLog = MessageSentLog(
-            timestamp, "", station.getStationUDPAddress(), neighbour.getStationUDPAddress())
+            msg.timestamp, "", station.getStationUDPAddress(), neighbour.getStationUDPAddress())
         messageSentLogs.addLog(newLog)
         print(f"neighbour: {neighbour.udp_address}")
         udpServerSocket.sendto(send_length, neighbour.udp_address)
@@ -273,6 +272,17 @@ def get_message_to_send(requestObject, station, timestamp):
     return message
 
 
+def getDestinationTimetable(station, msg):
+    destinationName = msg.destinationName.strip("\"")
+    print(station.timetable)
+    for record in station.timetable:
+        print(f"destination name: {destinationName}")
+        print(f"timetable destination name: {record[4]}")
+        if str(record[4]) == destinationName:
+            print(
+                f"departing from {station.stationName}, departing at: {record[0]}")
+
+
 def service_tcp_connection(key, mask, sel, station, udpServerSocket, messageSentLogs):
     request = False
     method = "GET"
@@ -289,10 +299,16 @@ def service_tcp_connection(key, mask, sel, station, udpServerSocket, messageSent
             requestBody = getRequestBody(recv_data.split("\r\n"))
             print(f"Request body: {requestBody}")
             if "station" in requestBody:
-                # send message
+                # Request has been received!
                 requestObject = getRequestObject(requestBody)
-                send_udp(key, mask, sel, station,
-                         requestObject, udpServerSocket, messageSentLogs)
+                # Create message
+                timestamp = ts.time()
+                msg = get_message_to_send(requestObject, station, timestamp)
+                # Check if message destination matches timetable destinations
+                getDestinationTimetable(station, msg)
+                # Send message
+                # send_udp(key, mask, sel, station,
+                #          msg, udpServerSocket, messageSentLogs)
 
         else:  # the client has closed their socket so the server should too.
             print('closing connection to', data.addr)
@@ -467,7 +483,6 @@ def main(argv):
     # 2) check if destination matches the timetable records. If so, get the earliest time.
     # 3) if current station is the source, then respond back to client. Else if station is not source, then send message back to parent.
     # 4) if destination doesn't match, then forward on the message to neighbours (append station object to message route[]), but not to the parent.
-
     # TODO: if neighbour == destination, then use timing based on timetable
     # TODO: Design and implementation of a simple programming language independent protocol to exchange queries,
     # responses, and (possibly) control information between stations.
