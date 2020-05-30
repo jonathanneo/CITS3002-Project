@@ -185,10 +185,21 @@ html_content = """
                     <label for="tripType">What type of trip?</label>
                     <select name="tripType" id="tripType" class="form-control"></select>
                 </div>
+                <br>
                 <div>
                     <input type="submit" value="Get travel plan" class="btn btn-primary">
                 </div>
             </form>
+
+            <div id="response">
+                <br>
+                <hr>
+                <h4>Trip Details</h4>
+                <div class="card">
+                    <ul id="response-list" class="list-group list-group-flush">
+                    </ul>
+                </div>
+            </div>
         </div>
     </body>
 </html>
@@ -197,6 +208,20 @@ html_content = """
 
     const timetable = {timetable};
     const tripTypes = {tripTypes};
+    const stationResponse = {stationResponse};
+    const responses = {responses};
+
+    const respond = (response, $response, $responseList) => {{
+        $response.show();
+        responses.forEach( (response, index) => {{
+            list = `<li class="list-group-item">
+                        <span class="badge badge-secondary badge-pill"> ${{index+1}}</span>
+                        Depart at <b>${{response[0]}}</b> from <b>${{response[2]}}</b> taking <b>${{response[1]}}</b> and arrive at
+                        <b>${{response[4]}}</b> at <b>${{response[3]}}</b>.
+                    </li>`
+            $responseList.append(list);
+        }});
+    }}
 
     const updateTimetable = ($timetable) => {{
         timetable.map(record => $('<option>')
@@ -215,8 +240,14 @@ html_content = """
     $(() => {{
         const $timetable = $("#timetable");
         const $tripType = $("#tripType");
+        const $response = $("#response")
+        const $responseList = $("#response-list")
+        $response.hide();
         updateTimetable($timetable);
         updateTripType($tripType);
+        if(stationResponse){{
+            respond(responses, $response, $responseList);
+        }}
     }});
 </script>
 """
@@ -293,7 +324,7 @@ def get_message_to_send(requestObject, station, timestamp):
     return message
 
 
-def destinationFound(station, msg):
+def findDestination(station, msg):
     destinationName = msg.destinationName.strip(
         "\"")  # strip " from destination name
     for trip in station.getEarliestTrips(msg.time):
@@ -325,12 +356,31 @@ def service_tcp_connection(key, mask, sel, station, udpServerSocket, messageSent
                 msg = get_message_to_send(requestObject, station, timestamp)
                 print("Obtained message!")
                 # Check if message destination matches timetable destinations
-                destFound, earliestTrip = destinationFound(station, msg)
+                destFound, earliestTrip = findDestination(station, msg)
                 if destFound:
+                    tripFound = "true"
+                    # if server is the source server, then send message back to client
+                    sendData = "HTTP/1.1 200 OK\r\n"
+                    sendData += "Content-Type: text/html; charset=utf-8\r\n"
+                    sendData += "\r\n"
+                    sendData += html_content.format(station=station.stationName,
+                                                    timetable=station.timetable,
+                                                    address=data.addr,
+                                                    stationTcpAddress=station.getStationTCPAddress(),
+                                                    tripTypes=TRIP_TYPE,
+                                                    stationResponse="true",
+                                                    tripFound=tripFound,
+                                                    responses=[earliestTrip])
+                    sock.send(sendData.encode())
+                    request = False  # request fulfiled
+                    sel.unregister(sock)
+                    sock.close()
+                    # if server is not the source server, then send message back to the parent
                     print("Destination found!")
                     print(earliestTrip)
 
                 if not destFound:
+                    # if destination is not found, then pass message forward to other nodes
                     a = 0
                     # Send message
                     # send_udp(key, mask, sel, station,
@@ -350,7 +400,9 @@ def service_tcp_connection(key, mask, sel, station, udpServerSocket, messageSent
                                             timetable=station.timetable,
                                             address=data.addr,
                                             stationTcpAddress=station.getStationTCPAddress(),
-                                            tripTypes=TRIP_TYPE)
+                                            tripTypes=TRIP_TYPE,
+                                            stationResponse="false",
+                                            responses=[])
             sock.send(sendData.encode())
             request = False  # request fulfiled
             sel.unregister(sock)
