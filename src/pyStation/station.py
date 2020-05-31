@@ -135,7 +135,7 @@ class Message:
         self.hopCount = 0  # set hop count to 0 initially
         self.time = time
         self.timestamp = timestamp
-        self.messageType = messageType
+        self.messageType = '"' + messageType + '"'
 
     def addRoute(self, station):
         stationString = station.getStationString(self.timestamp, self.time)
@@ -333,6 +333,24 @@ def findDestination(station, msg):
     return False, []
 
 
+def send_udp_to_parent(key, mask, sel, station, msg, udpServerSocket, messageSentLogs):
+    neighbours = station.neighbours
+    print(f"Message to send: {msg}")
+    msg.messageType = '"incoming"'
+    msg_clean = str(msg).replace("'", '"')
+    message = msg_clean.encode(FORMAT)
+    msg_length = len(message)
+    send_length = str(msg_length).encode(FORMAT)
+    send_length += b" " * (station.HeaderSize - len(send_length))
+
+    # get parent
+    parent = eval(msg.route[msg.hopCount])
+    print(parent)
+    # send to parent
+    udpServerSocket.sendto(send_length, parent.stationUDPAddress)
+    udpServerSocket.sendto(message, parent.stationUDPAddress)
+
+
 def service_tcp_connection(key, mask, sel, station, udpServerSocket, messageSentLogs):
     request = False
     method = "GET"
@@ -358,33 +376,34 @@ def service_tcp_connection(key, mask, sel, station, udpServerSocket, messageSent
                 # Check if message destination matches timetable destinations
                 destFound, earliestTrip = findDestination(station, msg)
                 if destFound:
-                    tripFound = "true"
-                    # if server is the source server, then send message back to client
-                    sendData = "HTTP/1.1 200 OK\r\n"
-                    sendData += "Content-Type: text/html; charset=utf-8\r\n"
-                    sendData += "\r\n"
-                    sendData += html_content.format(station=station.stationName,
-                                                    timetable=station.timetable,
-                                                    address=data.addr,
-                                                    stationTcpAddress=station.getStationTCPAddress(),
-                                                    tripTypes=TRIP_TYPE,
-                                                    stationResponse="true",
-                                                    tripFound=tripFound,
-                                                    responses=[earliestTrip])
-                    sock.send(sendData.encode())
-                    request = False  # request fulfiled
-                    sel.unregister(sock)
-                    sock.close()
-                    # if server is not the source server, then send message back to the parent
-                    print("Destination found!")
-                    print(earliestTrip)
+                    if eval(msg.sourceName) == station.stationName:
+                        # if server is the source server, then send message back to client
+                        sendData = "HTTP/1.1 200 OK\r\n"
+                        sendData += "Content-Type: text/html; charset=utf-8\r\n"
+                        sendData += "\r\n"
+                        sendData += html_content.format(station=station.stationName,
+                                                        timetable=station.timetable,
+                                                        address=data.addr,
+                                                        stationTcpAddress=station.getStationTCPAddress(),
+                                                        tripTypes=TRIP_TYPE,
+                                                        stationResponse="true",
+                                                        responses=[earliestTrip])
+                        sock.send(sendData.encode())
+                        request = False  # request fulfiled
+                        sel.unregister(sock)
+                        sock.close()
+                        print("Destination found!")
+                        print(earliestTrip)
+
+                    else:
+                        # if server is not the source server, then send message back to the parent
+                        send_udp_to_parent(key, mask, sel, station, msg,
+                                           udpServerSocket, messageSentLogs)
 
                 if not destFound:
                     # if destination is not found, then pass message forward to other nodes
-                    a = 0
-                    # Send message
-                    # send_udp(key, mask, sel, station,
-                    #          msg, udpServerSocket, messageSentLogs)
+                    send_udp(key, mask, sel, station, msg,
+                             udpServerSocket, messageSentLogs)
 
         else:  # the client has closed their socket so the server should too.
             print('closing connection to', data.addr)
