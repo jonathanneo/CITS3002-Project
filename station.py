@@ -44,25 +44,11 @@ class Station:
     def addNeighbour(self, neighbour):
         self.neighbours.append(neighbour)
 
-    def convertTimetableToString(self):
-        string = "["
-        for item in self.timetable:
-            string += str(item) + ", "
-        string = string + "]"
-        return string
-
     def getStationUDPAddress(self):
         return f"http://{self.server}:{self.udp_port}"
 
     def getStationTCPAddress(self):
         return f"http://{self.server}:{self.tcp_port}"
-
-    def convertListToString(self, list):
-        string = "["
-        for item in list:
-            string += str(item) + ", "
-        string = string + "]"
-        return string
 
     def getEarliestTrips(self, time):
         earliestTrips = []
@@ -70,24 +56,28 @@ class Station:
             timeValue = datetime.strptime(time, "%H:%M")
             timetableRecordTime = datetime.strptime(
                 timetableRecord[0], "%H:%M")
-            timetableRecordDestination = timetableRecord[4]
+            timetableRecordDestination = str(timetableRecord[4])
             if len(earliestTrips) == 0:
                 if timetableRecordTime >= timeValue:
                     earliestTrips.append(
                         timetableRecord)
             else:
+                recordFound = False
                 for trips in earliestTrips:
-                    if timetableRecordTime >= timeValue and trips[4] != timetableRecordDestination:
-                        earliestTrips.append(
-                            timetableRecord)
+                    if timetableRecordTime >= timeValue and str(trips[4]) == str(timetableRecordDestination):
+                        recordFound = True
+                if recordFound == False:
+                    earliestTrips.append(
+                        timetableRecord)
         return earliestTrips
 
-    def getStationString(self, timestamp, time):
-        return f'{{ "stationName" : "{self.stationName}", \
-                    "timestamp" : "{timestamp}" , \
-                    "stationUDPAddress": "{self.getStationUDPAddress()}", \
-                    "earliestTrips": {self.getEarliestTrips(time)} \
-            }}'
+    def getStationObject(self, timestamp, time):
+        return {
+            "stationName": self.stationName,
+            "timestamp": timestamp,
+            "stationUDPAddress": self.getStationUDPAddress(),
+            "earliestTrips": self.getEarliestTrips(time)
+        }
 
 
 class MessageSentLog:
@@ -96,13 +86,6 @@ class MessageSentLog:
         self.parentAddress = str(parentAddress)
         self.stationAddress = str(stationAddress)
         self.destinationStationAddress = str(destinationStationAddress)
-
-    def __str__(self):
-        return f'{{ "timestamp" : {self.timestamp}, \
-                    "parentAddress" : {self.parentAddress}, \
-                    "stationAddress" : {self.stationAddress}, \
-                    "destinationStationAddress" : {self.destinationStationAddress} \
-            }}'
 
 
 class MessageSentLogs:
@@ -120,43 +103,18 @@ class MessageSentLogs:
 
 class Message:
     def __init__(self, sourceName, destinationName, tripType, time, timestamp, messageType):
-        self.sourceName = '"' + sourceName + '"'
-        if destinationName == None:
-            destinationName = '""'
-        else:
-            destinationName = '"' + destinationName + '"'
+        self.sourceName = sourceName
         self.destinationName = destinationName
         self.route = []
-        if tripType == None:
-            tripType = '""'
-        else:
-            tripType = '"' + tripType + '"'
         self.tripType = tripType
         self.hopCount = 0  # set hop count to 0 initially
         self.time = time
         self.timestamp = timestamp
-        self.messageType = '"' + messageType + '"'
+        self.messageType = messageType
 
     def addRoute(self, station):
-        stationString = station.getStationString(self.timestamp, self.time)
-        print(f"station String: {stationString}")
-        self.route.append(stationString)
-
-    def getRouteString(self):
-        string = "["
-        for item in self.route:
-            string += str(item) + ", "
-        string = string + "]"
-        return string
-
-    def __str__(self):
-        return f'{{ "sourceName" : {self.sourceName} , \
-                    "destinationName" : {self.destinationName} , \
-                    "route": {self.getRouteString()}, \
-                    "tripType": {self.tripType}, \
-                    "hopCount": {self.hopCount}, \
-                    "messageType":{self.messageType} \
-             }}'
+        stationObject = station.getStationObject(self.timestamp, self.time)
+        self.route.append(stationObject)
 
 
 html_content = """
@@ -281,8 +239,7 @@ def getRequestObject(request_body):
 def send_udp(key, mask, sel, station, msg, udpServerSocket, messageSentLogs):
     neighbours = station.neighbours
     print(f"Message to send: {msg}")
-    # msg = json.dumps(msg)
-    msg_clean = str(msg).replace("'", '"')
+    msg_clean = json.dumps(msg)
     message = msg_clean.encode(FORMAT)
     msg_length = len(message)
     send_length = str(msg_length).encode(FORMAT)
@@ -291,14 +248,14 @@ def send_udp(key, mask, sel, station, msg, udpServerSocket, messageSentLogs):
     # send to each neighbour
     for neighbour in neighbours:
         newLog = MessageSentLog(
-            msg.timestamp, "", station.getStationUDPAddress(), neighbour.getStationUDPAddress())
+            msg["timestamp"], "", station.getStationUDPAddress(), neighbour.getStationUDPAddress())
         messageSentLogs.addLog(newLog)
         print(f"neighbour: {neighbour.udp_address}")
         udpServerSocket.sendto(send_length, neighbour.udp_address)
         udpServerSocket.sendto(message, neighbour.udp_address)
 
     for index, log in enumerate(messageSentLogs.logs):
-        print(f"Log index: {index} || {str(log)}")
+        print(f"Log index: {index} || {vars(log)}")
 
 
 def get_message_to_send(requestObject, station, timestamp):
@@ -306,6 +263,7 @@ def get_message_to_send(requestObject, station, timestamp):
     time = ""
     tripType = ""
     messageType = "outgoing"  # either outgoing or incoming
+    print(f"REQUEST OBJECT : {requestObject}")
     for item in requestObject:
         if item.get("station") != None:
             destination = item.get("station")
@@ -321,14 +279,19 @@ def get_message_to_send(requestObject, station, timestamp):
                       timestamp,
                       messageType)
     message.addRoute(station)
+    print(vars(message))
+    message = json.dumps(vars(message))  # return json object
+    message = json.loads(message)
     return message
 
 
 def findDestination(station, msg):
-    destinationName = msg.destinationName.strip(
-        "\"")  # strip " from destination name
-    for trip in station.getEarliestTrips(msg.time):
+    destinationName = msg["destinationName"]
+    route = msg["route"][msg["hopCount"]]
+    print(f"route: {route}")
+    for trip in msg["route"][msg["hopCount"]]["earliestTrips"]:
         if trip[4] == destinationName:
+            print(trip)
             return True, trip
     return False, []
 
@@ -336,19 +299,39 @@ def findDestination(station, msg):
 def send_udp_to_parent(key, mask, sel, station, msg, udpServerSocket, messageSentLogs):
     neighbours = station.neighbours
     print(f"Message to send: {msg}")
-    msg.messageType = '"incoming"'
-    msg_clean = str(msg).replace("'", '"')
+    msg["messageType"] = "incoming"
+    msg["hopCount"] = msg["hopCount"] - 1
+    msg_clean = json.dumps(msg)
     message = msg_clean.encode(FORMAT)
     msg_length = len(message)
     send_length = str(msg_length).encode(FORMAT)
     send_length += b" " * (station.HeaderSize - len(send_length))
 
     # get parent
-    parent = eval(msg.route[msg.hopCount])
+    parent = msg["route"][msg["hopCount"]]
     print(parent)
     # send to parent
-    udpServerSocket.sendto(send_length, parent.stationUDPAddress)
-    udpServerSocket.sendto(message, parent.stationUDPAddress)
+    addressList = parent["stationUDPAddress"].strip("http://").split(":")
+    addressTuple = (addressList[0], int(addressList[1]))
+    udpServerSocket.sendto(send_length, addressTuple)
+    udpServerSocket.sendto(message, addressTuple)
+
+
+def send_response_to_client(station, data, earliestTrip, sock, sel, stationResponse):
+    sendData = "HTTP/1.1 200 OK\r\n"
+    sendData += "Content-Type: text/html; charset=utf-8\r\n"
+    sendData += "\r\n"
+    sendData += html_content.format(station=station.stationName,
+                                    timetable=station.timetable,
+                                    address=data.addr,
+                                    stationTcpAddress=station.getStationTCPAddress(),
+                                    tripTypes=TRIP_TYPE,
+                                    stationResponse=stationResponse,
+                                    responses=[earliestTrip])
+    sock.send(sendData.encode())
+    sel.unregister(sock)
+    sock.close()
+    return False
 
 
 def service_tcp_connection(key, mask, sel, station, udpServerSocket, messageSentLogs):
@@ -376,30 +359,9 @@ def service_tcp_connection(key, mask, sel, station, udpServerSocket, messageSent
                 # Check if message destination matches timetable destinations
                 destFound, earliestTrip = findDestination(station, msg)
                 if destFound:
-                    if eval(msg.sourceName) == station.stationName:
-                        # if server is the source server, then send message back to client
-                        sendData = "HTTP/1.1 200 OK\r\n"
-                        sendData += "Content-Type: text/html; charset=utf-8\r\n"
-                        sendData += "\r\n"
-                        sendData += html_content.format(station=station.stationName,
-                                                        timetable=station.timetable,
-                                                        address=data.addr,
-                                                        stationTcpAddress=station.getStationTCPAddress(),
-                                                        tripTypes=TRIP_TYPE,
-                                                        stationResponse="true",
-                                                        responses=[earliestTrip])
-                        sock.send(sendData.encode())
-                        request = False  # request fulfiled
-                        sel.unregister(sock)
-                        sock.close()
-                        print("Destination found!")
-                        print(earliestTrip)
-
-                    else:
-                        # if server is not the source server, then send message back to the parent
-                        send_udp_to_parent(key, mask, sel, station, msg,
-                                           udpServerSocket, messageSentLogs)
-
+                    # if server is the source server, then send message back to client
+                    request = send_response_to_client(
+                        station, data, earliestTrip, sock, sel, "true")
                 if not destFound:
                     # if destination is not found, then pass message forward to other nodes
                     send_udp(key, mask, sel, station, msg,
@@ -412,20 +374,8 @@ def service_tcp_connection(key, mask, sel, station, udpServerSocket, messageSent
     if mask & selectors.EVENT_WRITE:  # write the data back to the client
         # we have received, and now we can send
         if request:
-            sendData = "HTTP/1.1 200 OK\r\n"
-            sendData += "Content-Type: text/html; charset=utf-8\r\n"
-            sendData += "\r\n"
-            sendData += html_content.format(station=station.stationName,
-                                            timetable=station.timetable,
-                                            address=data.addr,
-                                            stationTcpAddress=station.getStationTCPAddress(),
-                                            tripTypes=TRIP_TYPE,
-                                            stationResponse="false",
-                                            responses=[])
-            sock.send(sendData.encode())
-            request = False  # request fulfiled
-            sel.unregister(sock)
-            sock.close()
+            request = send_response_to_client(
+                station, data, [], sock, sel, "false")
 
 
 def startTcpPort(station, sel):
@@ -448,6 +398,18 @@ def startUdpPort(station, sel):
     return udpServerSocket
 
 
+def add_station_to_route(message, station, timestamp):
+    print(f"MESSAGE || : {message}")
+    for trip in message["route"][message["hopCount"]]["earliestTrips"]:
+        if trip[4] == station.stationName:
+            lastRouteTime = trip[3]
+    stationObject = station.getStationObject(timestamp, lastRouteTime)
+    # print(f"station object: {stationObject}")
+    message["route"].append(stationObject)
+    message["hopCount"] = message["hopCount"] + 1
+    return message
+
+
 def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSentLogs):
     bytesAddressPair = udpServerSocket.recvfrom(
         station.HeaderSize)
@@ -456,16 +418,40 @@ def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSen
         int(message_length))
     print(f"Message length: {message_length}")
     message = bytesAddressPair[0].decode()
-    message = eval(message)  # convert string to json
+    msg = json.loads(message)  # load msg
     address = bytesAddressPair[1]
     clientMsg = f"Message from Client:{message}"
     clientIP = f"Client IP Address:{address}"
+    print(f"sourceName: {msg['sourceName']}")
     print(clientMsg)
     print(clientIP)
 
-    print(f"sourceName: {message.get('sourceName')}")
-    #         # udpServerSocket.sendto(
-    #         #     "Hello from server.".encode(), address)
+    # add message to waiting bay
+    # if all messages has not returned, then do nothing
+    # else , fetch from waiting bay and process all messages
+
+    # check if I am the source
+    if msg["messageType"] == "incoming" and msg["sourceName"] == station.stationName:
+        # return webpage with trip details
+        print("It's for me!")
+    else:
+        # add station to route
+        timestamp = ts.time()
+        msg = add_station_to_route(msg, station, timestamp)
+        # check if destination is found
+        destFound, earliestTrip = findDestination(station, msg)
+        print(destFound)
+        print(earliestTrip)
+        # if station contains route to destination, then send back to source (incoming)
+        if destFound:
+            send_udp_to_parent(key, mask, sel, station, msg,
+                               udpServerSocket, messageSentLogs)
+        # if station does not contain route to destination, then send to neighbours (outgoing)
+        if not destFound:
+            send_udp(key, mask, sel, station, msg,
+                     udpServerSocket, messageSentLogs)
+        #         # udpServerSocket.sendto(
+        #         #     "Hello from server.".encode(), address)
 
 
 def serveTcpUdpPort(station, sel, tcpServerSocket, udpServerSocket, messageSentLogs):
@@ -553,8 +539,8 @@ def main(argv):
     print(f"Neighbour station: {station.neighbours}")
 
     # Read CSV timetable file -- assume that all contents are correct
-    path = str(pathlib.Path(__file__).parent.absolute()).replace(
-        "\src\pyStation", f"\datafiles\\tt-{station.stationName}")
+    path = str(pathlib.Path(__file__).parent.absolute()) + \
+        f"\\tt-{station.stationName}"
     print(path)
     timetable, stationCoordinates = read_timetable(path)
     station.addCoordinates(
