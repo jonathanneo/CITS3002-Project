@@ -353,7 +353,7 @@ def send_response_to_client(station, data, earliestTrip, sock, sel, stationRespo
                                     stationTcpAddress=station.getStationTCPAddress(),
                                     tripTypes=TRIP_TYPE,
                                     stationResponse=stationResponse,
-                                    responses=[earliestTrip])
+                                    responses=earliestTrip)
     sock.send(sendData.encode())
     if closeConn:
         sel.unregister(sock)
@@ -391,7 +391,7 @@ def service_tcp_connection(key, mask, sel, station, udpServerSocket, messageSent
                     # if server is the source server, then send message back to client
                     print("DESTINATION WAS FOUND CLOSING SOCKET!!!!!!!!")
                     request = send_response_to_client(
-                        station, data, earliestTrip, sock, sel, "true", True)
+                        station, data, [earliestTrip], sock, sel, "true", True)
                     clientRequestLogs.removeLog(msg)
                 if not destFound:
                     # if destination is not found, then pass message forward to other nodes
@@ -405,8 +405,14 @@ def service_tcp_connection(key, mask, sel, station, udpServerSocket, messageSent
     if mask & selectors.EVENT_WRITE:  # write the data back to the client
         # we have received, and now we can send
         if request:
-            request = send_response_to_client(
-                station, data, [], sock, sel, "false", True)
+            send = True
+            for log in clientRequestLogs.logs:
+                if log.sock == sock:
+                    send = False
+            if send:
+                print("|||||| SENDING RESPONSE BACK TO CLIENT |||||||||||||")
+                request = send_response_to_client(
+                    station, data, [[]], sock, sel, "false", True)
 
 
 def startTcpPort(station, sel):
@@ -486,16 +492,16 @@ def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSen
         print("It's for me!")
         earliestTrips = []
         for route in msg["route"]:
-            earliestTrips.append(route["earliestTrips"])
+            print(route["earliestTrips"])
+            earliestTrips.append(route["earliestTrips"][0])
         clientLog = clientRequestLogs.getLog(
             msg)  # clientRequestLogs.logs[0]  #
         print(f"SOCK: {clientLog.sock}")
         print(f"DATA: {clientLog.data.addr}")
-        # print(f"raddr: {clientLog.sock.socket.getpeername()}")
-        # clientLog.sock.connect()
-        # clientSocket = socket.create_connection(clientLog.data.addr)
         send_response_to_client(
             station, clientLog.data, earliestTrips, clientLog.sock, clientLog.sel, "true", True)
+        clientRequestLogs.removeLog(msg)
+        print("Log Removed")
     else:
         # add station to route
         timestamp = ts.time()
