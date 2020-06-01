@@ -262,7 +262,7 @@ def getRequestObject(request_body):
     return request_body_objects
 
 
-def send_udp(station, msg, udpServerSocket, messageSentLogs):
+def sendUdp(station, msg, udpServerSocket, messageSentLogs):
     neighbours = station.neighbours
     print(f"Message to send: {msg}")
     msg_clean = json.dumps(msg)
@@ -321,7 +321,7 @@ def findDestination(station, msg):
     return False, []
 
 
-def send_udp_to_parent(station, msg, udpServerSocket, messageSentLogs):
+def sendUdpToParent(station, msg, udpServerSocket, messageSentLogs):
     neighbours = station.neighbours
     print(f"Message to send: {msg}")
     msg["messageType"] = "incoming"
@@ -342,7 +342,7 @@ def send_udp_to_parent(station, msg, udpServerSocket, messageSentLogs):
     udpServerSocket.sendto(message, addressTuple)
 
 
-def send_response_to_client(station, data, earliestTrip, sock, sel, stationResponse):
+def sendResponseToClient(station, data, earliestTrip, sock, sel, stationResponse):
     sendData = "HTTP/1.1 200 OK\r\n"
     sendData += "Content-Type: text/html; charset=utf-8\r\n"
     sendData += "\r\n"
@@ -359,7 +359,7 @@ def send_response_to_client(station, data, earliestTrip, sock, sel, stationRespo
     return False
 
 
-def service_tcp_connection(key, mask, sel, station, udpServerSocket, messageSentLogs, clientRequestLogs):
+def serviceTcpConnection(key, mask, sel, station, udpServerSocket, messageSentLogs, clientRequestLogs):
     request = False
     method = "GET"
     sock = key.fileobj
@@ -389,13 +389,13 @@ def service_tcp_connection(key, mask, sel, station, udpServerSocket, messageSent
                     # if server is the source server, then send message back to client
                     print("DESTINATION WAS FOUND CLOSING SOCKET!!!!!!!!")
                     earliestTrip.insert(0, station.stationName)
-                    request = send_response_to_client(
+                    request = sendResponseToClient(
                         station, data, [earliestTrip], sock, sel, "true")
                     clientRequestLogs.removeLog(msg)
                 if not destFound:
                     # if destination is not found, then pass message forward to other nodes
-                    send_udp(station, msg,
-                             udpServerSocket, messageSentLogs)
+                    sendUdp(station, msg,
+                            udpServerSocket, messageSentLogs)
 
         else:  # the client has closed their socket so the server should too.
             print('closing connection to', data.addr)
@@ -410,7 +410,7 @@ def service_tcp_connection(key, mask, sel, station, udpServerSocket, messageSent
                     send = False
             if send:
                 print("|||||| SENDING RESPONSE BACK TO CLIENT |||||||||||||")
-                request = send_response_to_client(
+                request = sendResponseToClient(
                     station, data, [[]], sock, sel, "false")
 
 
@@ -435,7 +435,7 @@ def startUdpPort(station, sel):
     return udpServerSocket
 
 
-def remove_non_destination(message, station):
+def removeNonDestination(message, station):
     newEarliestTrips = []
     destination = message["destinationName"]
     earliestTrips = message["route"][message["hopCount"]]["earliestTrips"]
@@ -447,11 +447,11 @@ def remove_non_destination(message, station):
     return message
 
 
-def get_incoming_earliest_trip(message, station):
+def getIncomingEarliestTrip(message, station):
     return message
 
 
-def add_station_to_route(message, station, timestamp):
+def addStationToRoute(message, station, timestamp):
     print(f"MESSAGE || : {message}")
     for trip in message["route"][message["hopCount"]]["earliestTrips"]:
         if trip[4] == station.stationName:
@@ -498,25 +498,25 @@ def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSen
             msg)
         print(f"SOCK: {clientLog.sock}")
         print(f"DATA: {clientLog.data.addr}")
-        send_response_to_client(
+        sendResponseToClient(
             station, clientLog.data, earliestTrips, clientLog.sock, clientLog.sel, "true")
         clientRequestLogs.removeLog(msg)
 
     else:
         # add station to route
         timestamp = ts.time()
-        msg = add_station_to_route(msg, station, timestamp)
+        msg = addStationToRoute(msg, station, timestamp)
         # check if destination is found
         destFound, earliestTrip = findDestination(station, msg)
         # if station contains route to destination, then send back to source (incoming)
         if destFound:
-            msg = remove_non_destination(msg, station)
-            send_udp_to_parent(station, msg,
-                               udpServerSocket, messageSentLogs)
+            msg = removeNonDestination(msg, station)
+            sendUdpToParent(station, msg,
+                            udpServerSocket, messageSentLogs)
         # if station does not contain route to destination, then send to neighbours (outgoing)
         if not destFound:
-            send_udp(station, msg,
-                     udpServerSocket, messageSentLogs)
+            sendUdp(station, msg,
+                    udpServerSocket, messageSentLogs)
 
 
 def serveTcpUdpPort(station, sel, tcpServerSocket, udpServerSocket, messageSentLogs, clientRequestLogs):
@@ -548,7 +548,7 @@ def serveTcpUdpPort(station, sel, tcpServerSocket, udpServerSocket, messageSentL
                 else:
                     try:
                         if key.fileobj.getsockname() == station.tcp_address:
-                            service_tcp_connection(
+                            serviceTcpConnection(
                                 key, mask, sel, station, udpServerSocket, messageSentLogs, clientRequestLogs)
                     except:
                         pass
@@ -578,7 +578,7 @@ def acceptInputs(argv):
     return station
 
 
-def read_timetable(filepath):
+def readTimetable(filepath):
     timetable = []
     rowCount = 0
     with open(filepath, 'r') as file:
@@ -606,7 +606,7 @@ def main(argv):
     path = str(pathlib.Path(__file__).parent.absolute()) + \
         f"\\tt-{station.stationName}"
     print(path)
-    timetable, stationCoordinates = read_timetable(path)
+    timetable, stationCoordinates = readTimetable(path)
     station.addCoordinates(
         float(stationCoordinates[1]), float(stationCoordinates[2]))  # add coordinates
     print(f"X: {station.x} | Y : {station.y} ")
