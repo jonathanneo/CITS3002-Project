@@ -1,4 +1,4 @@
 # ignore datafiles
 datafiles*/
-*.Test
+*.Test*
 *.exe

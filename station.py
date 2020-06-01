@@ -102,6 +102,12 @@ class ClientRequestLogs:
 
     def getLog(self, msg):
         for log in self.logs:
+            print(
+                f"sourceName1: {log.msg['sourceName']} || sourceName2: {msg['sourceName']}")
+            print(
+                f"sourceName1: {log.msg['destinationName']} || sourceName2: {msg['destinationName']}")
+            print(
+                f"sourceName1: {datetime.fromtimestamp(log.msg['timestamp'])} || sourceName2: {datetime.fromtimestamp(msg['timestamp'])}")
             if log.msg["sourceName"] == msg["sourceName"] and log.msg["destinationName"] == msg["destinationName"] and log.msg["timestamp"] == msg["timestamp"]:
                 return log
 
@@ -129,12 +135,14 @@ class MessageSentLogs:
         return None
 
     def getLogs(self, parentAddress, timestamp):
-        logs = []
+        foundLog = []
         for record in self.logs:
-            if record.parentAddress == parentAddress and record.timestamp == timestamp:
-                logs.append(record)
-        if len(logs) > 0:
-            return logs
+            print(f"record: {record}")
+            if str(record.parentAddress) == str(parentAddress) and str(record.timestamp) == str(timestamp):
+                foundLog.append(record)
+                print(f"found: {record}")
+        if len(foundLog) > 0:
+            return foundLog
         else:
             return None
 
@@ -149,6 +157,7 @@ class Message:
         self.time = time
         self.timestamp = timestamp
         self.messageType = messageType
+        self.routeEndFound = False
 
     def addRoute(self, station):
         stationObject = station.getStationObject(self.timestamp, self.time)
@@ -162,9 +171,14 @@ class MessageBank:
     def addMessage(self, message):
         self.bank.append(message)
 
-    def removeMessage(self, message):
-        self.bank.remove(message)
-        return message
+    def removeMessage(self, sourceName, destinationName, timestamp):
+        removedMessages = []
+        for message in self.bank:
+            if message["sourceName"] == sourceName and message["destinationName"] == destinationName and message["timestamp"] == timestamp:
+                removedMessages.append(message)
+                self.bank.remove(message)
+
+        return removedMessages
 
 
 html_content = """
@@ -217,18 +231,28 @@ html_content = """
     const timetable = {timetable};
     const tripTypes = {tripTypes};
     const stationResponse = {stationResponse};
+    console.log(stationResponse);
     const responses = {responses};
+    const routeEndFound = {routeEndFound};
+    console.log(routeEndFound);
 
-    const respond = (response, $response, $responseList) => {{
+    const respond = (response, $response, $responseList, routeEndFound) => {{
         $response.show();
-        responses.forEach( (response, index) => {{
-            list = `<li class="list-group-item">
-                        <span class="badge badge-secondary badge-pill"> ${{index+1}}</span>
-                        Depart from <b>${{response[0]}}</b> (<b>${{response[3]}}</b>) at <b>${{response[1]}}</b> taking <b>${{response[2]}}</b> and arrive at
-                        <b>${{response[5]}}</b> at <b>${{response[4]}}</b>.
-                    </li>`
-            $responseList.append(list);
-        }});
+        if(routeEndFound){{
+            $responseList.append(
+                `<li class="list-group-item">Oh uh! No route found!</li>`
+            );
+        }} else {{
+            responses.forEach( (response, index) => {{
+                list = `<li class="list-group-item">
+                            <span class="badge badge-secondary badge-pill"> ${{index+1}}</span>
+                            Depart from <b>${{response[0]}}</b> (<b>${{response[3]}}</b>) at <b>${{response[1]}}</b> taking <b>${{response[2]}}</b> and arrive at
+                            <b>${{response[5]}}</b> at <b>${{response[4]}}</b>.
+                        </li>`
+                $responseList.append(list);
+            }});
+        }}
+        
     }}
 
     const updateTimetable = ($timetable) => {{
@@ -254,7 +278,7 @@ html_content = """
         updateTimetable($timetable);
         updateTripType($tripType);
         if(stationResponse){{
-            respond(responses, $response, $responseList);
+            respond(responses, $response, $responseList, routeEndFound);
         }}
     }});
 </script>
@@ -294,14 +318,20 @@ def sendUdp(station, msg, udpServerSocket, messageSentLogs):
 
     # send to each neighbour
     for neighbour in neighbours:
-        newLog = MessageSentLog(
-            msg["timestamp"], "", station.getStationUDPAddress(), neighbour.getStationUDPAddress())
-        messageSentLogs.addLog(newLog)
-        udpServerSocket.sendto(send_length, neighbour.udp_address)
-        udpServerSocket.sendto(message, neighbour.udp_address)
+        # Don't send message to stations already in message
+        send = True
+        for route in msg["route"]:
+            if route["stationUDPAddress"] == neighbour.getStationUDPAddress():
+                send = False
+        if send:
+            newLog = MessageSentLog(
+                msg["timestamp"], "", station.getStationUDPAddress(), neighbour.getStationUDPAddress())
+            messageSentLogs.addLog(newLog)
+            udpServerSocket.sendto(send_length, neighbour.udp_address)
+            udpServerSocket.sendto(message, neighbour.udp_address)
 
-    for index, log in enumerate(messageSentLogs.logs):
-        print(f"Log index: {index} || {vars(log)}")
+    # for index, log in enumerate(messageSentLogs.logs):
+    #     print(f"Log index: {index} || {vars(log)}")
 
 
 def getMessageToSend(requestObject, station, timestamp):
@@ -338,11 +368,14 @@ def findDestination(station, msg):
     return False, []
 
 
-def sendUdpToParent(station, msg, udpServerSocket, messageSentLogs):
+def sendUdpToParent(station, msg, udpServerSocket, messageSentLogs, routeEndFound):
     neighbours = station.neighbours
+    msg["routeEndFound"] = routeEndFound
     msg["messageType"] = "incoming"
     msg["hopCount"] = msg["hopCount"] - 1
     msg_clean = json.dumps(msg)
+    print(f"MESSAGE TO PARENT : {msg_clean}")
+
     message = msg_clean.encode(FORMAT)
     msg_length = len(message)
     send_length = str(msg_length).encode(FORMAT)
@@ -357,7 +390,11 @@ def sendUdpToParent(station, msg, udpServerSocket, messageSentLogs):
     udpServerSocket.sendto(message, addressTuple)
 
 
-def sendResponseToClient(station, data, earliestTrip, sock, sel, stationResponse):
+def sendResponseToClient(station, data, earliestTrip, sock, sel, stationResponse, routeEndFound):
+    if routeEndFound == True:
+        routeEndFound = "true"
+    else:
+        routeEndFound = "false"
     sendData = "HTTP/1.1 200 OK\r\n"
     sendData += "Content-Type: text/html; charset=utf-8\r\n"
     sendData += "\r\n"
@@ -367,7 +404,8 @@ def sendResponseToClient(station, data, earliestTrip, sock, sel, stationResponse
                                     stationTcpAddress=station.getStationTCPAddress(),
                                     tripTypes=TRIP_TYPE,
                                     stationResponse=stationResponse,
-                                    responses=earliestTrip)
+                                    responses=earliestTrip,
+                                    routeEndFound=routeEndFound)
     sock.send(sendData.encode())
     sel.unregister(sock)
     sock.close()
@@ -396,12 +434,14 @@ def serviceTcpConnection(key, mask, sel, station, udpServerSocket, messageSentLo
                 clientRequestLog = ClientRequestLog(
                     msg, sock, sel, data)
                 clientRequestLogs.addLog(clientRequestLog)
+                print(
+                    f"NEW CLIENT REQUEST LOG ADDED : {vars(clientRequestLog)}")
                 destFound, earliestTrip = findDestination(station, msg)
                 if destFound:
                     # if server is the source server, then send message back to client
                     earliestTrip.insert(0, station.stationName)
                     request = sendResponseToClient(
-                        station, data, [earliestTrip], sock, sel, "true")
+                        station, data, [earliestTrip], sock, sel, "true", False)
                     clientRequestLogs.removeLog(msg)
                 if not destFound:
                     # if destination is not found, then pass message forward to other nodes
@@ -422,7 +462,7 @@ def serviceTcpConnection(key, mask, sel, station, udpServerSocket, messageSentLo
             if send:
                 print("|||||| SENDING RESPONSE BACK TO CLIENT |||||||||||||")
                 request = sendResponseToClient(
-                    station, data, [[]], sock, sel, "false")
+                    station, data, [[]], sock, sel, "false", False)
 
 
 def startTcpPort(station, sel):
@@ -458,12 +498,7 @@ def removeNonDestination(message, station):
     return message
 
 
-def getIncomingEarliestTrip(message, station):
-    return message
-
-
 def addStationToRoute(message, station, timestamp):
-    print(f"MESSAGE || : {message}")
     for trip in message["route"][message["hopCount"]]["earliestTrips"]:
         if trip[4] == station.stationName:
             lastRouteTime = trip[3]
@@ -476,19 +511,55 @@ def addStationToRoute(message, station, timestamp):
 
 def collateMessages(msg, messageBank):
     tripType = msg["tripType"]
+    numCompleteRoute = 0
+    for message in messageBank.bank:
+        # print(f'route not found check: {message["routeEndFound"]}')
+        if message["routeEndFound"] == False:
+            numCompleteRoute = numCompleteRoute + 1
 
-    if tripType == "FastestTrip":
+    print(f"num of complete route: {numCompleteRoute}")
+    if numCompleteRoute == 0:
+        return msg
+
+    if tripType == "FastestTrip" and numCompleteRoute > 0:
         # always grab the latest one (to destination) if looking for fastests trip
-        earliestTime = msg["route"][-1]["earliestTrips"][0][4]
-        earliestMessage = msg
-        for message in messageBank:
+        for message in messageBank.bank:
+            if message["routeEndFound"] == False:
+                earliestTime = message["route"][-1]["earliestTrips"][0][4]
+                earliestMessage = message
+                break
+        for message in messageBank.bank:
             compareEarliestTime = message["route"][-1]["earliestTrips"][0][4]
-            if compareEarliestTime < earliestTime:
+            if compareEarliestTime < earliestTime and message["routeEndFound"] == False:
                 earliestTime = compareEarliestTime
                 earliestMessage = message
+
+        print(f"earliestMessage : {earliestMessage}")
+        messageBank.removeMessage(
+            earliestMessage["sourceName"], earliestMessage["destinationName"], earliestMessage["timestamp"])
         return earliestMessage
 
     return None
+
+
+def routeEnd(station, msg):
+    visited = []
+    routes = msg["route"]
+    for neighbour in station.neighbours:
+        routeEndFound = False
+        for route in routes:
+            if route["stationUDPAddress"] == neighbour.getStationUDPAddress():
+                routeEndFound = True
+                visited.append(True)
+        if routeEndFound == False:
+            visited.append(False)
+
+    for visit in visited:
+        # if at least one more neighbour not yet visited then not dead end
+        if visit == False:
+            return False
+    # else it is a dead end
+    return True
 
 
 def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSentLogs, clientRequestLogs, messageBank):
@@ -509,24 +580,33 @@ def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSen
     if msg["messageType"] == "incoming":
         # check if I am the source
         if msg["sourceName"] == station.stationName:
-            # return webpage with trip details
-            sock = key.fileobj
-            data = key.data
-            print("It's for me!")
-            earliestTrips = []
-            for route in msg["route"]:
-                route["earliestTrips"][0].insert(0,
-                                                 route["stationName"])
-                earliestTrips.append(route["earliestTrips"][0])
-            clientLog = clientRequestLogs.getLog(
-                msg)
-            sendResponseToClient(
-                station, clientLog.data, earliestTrips, clientLog.sock, clientLog.sel, "true")
-            clientRequestLogs.removeLog(msg)
+            # add message to message bank and remove from MessageSentLog
+            messageBank.addMessage(msg)
             destinationStationAddress = f"http://{address[0]}:{address[1]}"
             removeTimestamp = msg["route"][msg["hopCount"]]["timestamp"]
-            messageSentLogs.removeLog(
+            removedLog = messageSentLogs.removeLog(
                 destinationStationAddress, removeTimestamp)
+            print(f"Removed Log: {vars(removedLog)}")
+            # print(f"Message sent logs: {vars(messageSentLogs.logs[0])}")
+            print(f"removed log parent address: {removedLog.parentAddress}")
+            print(f"removed log timestamp: {removedLog.timestamp}")
+            if messageSentLogs.getLogs(removedLog.parentAddress, removedLog.timestamp) == None:
+                # return webpage with trip details
+                collatedMessage = collateMessages(msg, messageBank)
+                print("It's for me!")
+                earliestTrips = []
+                for route in collatedMessage["route"]:
+                    route["earliestTrips"][0].insert(0,
+                                                     route["stationName"])
+                    earliestTrips.append(route["earliestTrips"][0])
+                clientLog = clientRequestLogs.getLog(
+                    collatedMessage)
+                routeEndFound = collatedMessage["routeEndFound"]
+                print(f"routeEndFound: {routeEndFound}")
+                print(f"client Log: {clientLog}")
+                sendResponseToClient(
+                    station, clientLog.data, earliestTrips, clientLog.sock, clientLog.sel, "true", routeEndFound)
+                clientRequestLogs.removeLog(collatedMessage)
         else:
             # add message to message bank and remove from MessageSentLog
             messageBank.addMessage(msg)
@@ -535,11 +615,14 @@ def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSen
             removedLog = messageSentLogs.removeLog(
                 destinationStationAddress, removeTimestamp)
             # if messageSentLog for message is empty, then collate messages from message bank and send back to parent
+            # TODO : change removedLog[""] to removedLog.object
             if messageSentLogs.getLogs(removedLog["parentAddress"], removedLog["timestamp"]) == None:
                 print("That's all folks!")
                 collatedMessage = collateMessages(msg, messageBank)
                 sendUdpToParent(station, collatedMessage,
-                                udpServerSocket, messageSentLogs)
+                                udpServerSocket, messageSentLogs, False)
+
+                print("message sent to parent")
 
     # message is outgoing
     else:
@@ -548,16 +631,21 @@ def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSen
         msg = addStationToRoute(msg, station, timestamp)
         # check if destination is found
         destFound, earliestTrip = findDestination(station, msg)
+        routeEndFound = routeEnd(station, msg)
         # if station contains route to destination, then send back to source
         if destFound:
             msg = removeNonDestination(msg, station)
             sendUdpToParent(station, msg,
-                            udpServerSocket, messageSentLogs)
+                            udpServerSocket, messageSentLogs, routeEndFound)
             print("message sent to parent")
         # if station does not contain route to destination, then send to neighbours (outgoing)
-        if not destFound:
+        if destFound == False and routeEndFound == False:
             sendUdp(station, msg,
                     udpServerSocket, messageSentLogs)
+        if destFound == False and routeEndFound == True:
+            print("dead end found!")
+            sendUdpToParent(station, msg,
+                            udpServerSocket, messageSentLogs, routeEndFound)
 
 
 def serveTcpUdpPort(station, sel, tcpServerSocket, udpServerSocket, messageSentLogs, clientRequestLogs, messageBank):
@@ -572,12 +660,12 @@ def serveTcpUdpPort(station, sel, tcpServerSocket, udpServerSocket, messageSentL
                 if key.data is None:
 
                     # if the listening socket is TCP
-                    try:
-                        if key.fileobj.getsockname() == station.tcp_address:
-                            acceptTcpWrapper(key.fileobj, sel)
-                    except:
-                        print("fail listen tcp")
-                        pass
+                    # try:
+                    if key.fileobj.getsockname() == station.tcp_address:
+                        acceptTcpWrapper(key.fileobj, sel)
+                    # except:
+                    #     print("fail listen tcp")
+                    #     pass
                     # if the listening socket is UDP
                     # try:
                     if key.fileobj.getsockname() == station.udp_address:
@@ -648,7 +736,7 @@ def main(argv):
 
     # Read CSV timetable file -- assume that all contents are correct
     path = str(pathlib.Path(__file__).parent.absolute()) + \
-        f"\\tt-{station.stationName}"
+        f"/tt-{station.stationName}"
     print(path)
     timetable, stationCoordinates = readTimetable(path)
     station.addCoordinates(
@@ -672,14 +760,10 @@ def main(argv):
     # Serve TCP and UDP ports
     serveTcpUdpPort(station, sel, tcpServerSocket,
                     udpServerSocket, messageSentLogs, clientRequestLogs, messageBank)
-    # TODO: 1) Create the message when a new TCP client request is received
-    # 2) check if destination matches the timetable records. If so, get the earliest time.
-    # 3) if current station is the source, then respond back to client. Else if station is not source, then send message back to parent.
     # 4) if destination doesn't match, then forward on the message to neighbours (append station object to message route[]), but not to the parent.
-    # TODO: if neighbour == destination, then use timing based on timetable
     # TODO: Design and implementation of a simple programming language independent protocol to exchange queries,
     # responses, and (possibly) control information between stations.
-    # TODO: go to the edges and return "not found" if destination not found
+    # TODO: !!go to the edges and return "not found" if destination not found
     # TODO: create code to evaluate FastestTrip or LeastTransfers at each station
     # TODO: Ability to find a valid (but not necessarily optimal) route between origin and destination stations,
     # for varying sized transport-networks of 2, 3, 5, 10, and 20 stations (including transport-networks involving cycles),
