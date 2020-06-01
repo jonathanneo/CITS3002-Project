@@ -200,8 +200,8 @@ html_content = """
         responses.forEach( (response, index) => {{
             list = `<li class="list-group-item">
                         <span class="badge badge-secondary badge-pill"> ${{index+1}}</span>
-                        Depart at <b>${{response[0]}}</b> from <b>${{response[2]}}</b> taking <b>${{response[1]}}</b> and arrive at
-                        <b>${{response[4]}}</b> at <b>${{response[3]}}</b>.
+                        Depart from <b>${{response[0]}}</b> (<b>${{response[3]}}</b>) at <b>${{response[1]}}</b> taking <b>${{response[2]}}</b> and arrive at
+                        <b>${{response[5]}}</b> at <b>${{response[4]}}</b>.
                     </li>`
             $responseList.append(list);
         }});
@@ -317,7 +317,6 @@ def findDestination(station, msg):
     print(f"route: {route}")
     for trip in msg["route"][msg["hopCount"]]["earliestTrips"]:
         if trip[4] == destinationName:
-            print(trip)
             return True, trip
     return False, []
 
@@ -389,6 +388,7 @@ def service_tcp_connection(key, mask, sel, station, udpServerSocket, messageSent
                 if destFound:
                     # if server is the source server, then send message back to client
                     print("DESTINATION WAS FOUND CLOSING SOCKET!!!!!!!!")
+                    earliestTrip.insert(0, station.stationName)
                     request = send_response_to_client(
                         station, data, [earliestTrip], sock, sel, "true")
                     clientRequestLogs.removeLog(msg)
@@ -491,10 +491,11 @@ def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSen
         print("It's for me!")
         earliestTrips = []
         for route in msg["route"]:
-            print(route["earliestTrips"])
+            route["earliestTrips"][0].insert(0,
+                                             route["stationName"])
             earliestTrips.append(route["earliestTrips"][0])
         clientLog = clientRequestLogs.getLog(
-            msg)  # clientRequestLogs.logs[0]  #
+            msg)
         print(f"SOCK: {clientLog.sock}")
         print(f"DATA: {clientLog.data.addr}")
         send_response_to_client(
@@ -507,8 +508,6 @@ def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSen
         msg = add_station_to_route(msg, station, timestamp)
         # check if destination is found
         destFound, earliestTrip = findDestination(station, msg)
-        print(destFound)
-        print(earliestTrip)
         # if station contains route to destination, then send back to source (incoming)
         if destFound:
             msg = remove_non_destination(msg, station)
@@ -528,7 +527,6 @@ def serveTcpUdpPort(station, sel, tcpServerSocket, udpServerSocket, messageSentL
             # the call will block until file object becomes ready -- either TCP or UDP has an EVENT_READ
             events = sel.select(timeout=None)
             for key, mask in events:
-                print(f"KEY: {key} || MASK: {mask}")
                 # a listening socket that hasn't been accepted yet i.e. no data
                 if key.data is None:
 
