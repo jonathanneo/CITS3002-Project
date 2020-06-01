@@ -80,6 +80,32 @@ class Station:
         }
 
 
+class ClientRequestLog:
+    def __init__(self, msg, sock, sel, data):
+        self.msg = msg
+        self.sock = sock
+        self.sel = sel
+        self.data = data
+
+
+class ClientRequestLogs:
+    def __init__(self):
+        self.logs = []
+
+    def addLog(self, log):
+        self.logs.append(log)
+
+    def removeLog(self, msg):
+        for log in self.logs:
+            if log.msg["sourceName"] == msg["sourceName"] and log.msg["destinationName"] == msg["destinationName"] and log.msg["timestamp"] == msg["timestamp"]:
+                self.logs.remove(log)
+
+    def getLog(self, msg):
+        for log in self.logs:
+            if log.msg["sourceName"] == msg["sourceName"] and log.msg["destinationName"] == msg["destinationName"] and log.msg["timestamp"] == msg["timestamp"]:
+                return log
+
+
 class MessageSentLog:
     def __init__(self, timestamp, parentAddress, stationAddress, destinationStationAddress):
         self.timestamp = str(timestamp)
@@ -334,7 +360,7 @@ def send_response_to_client(station, data, earliestTrip, sock, sel, stationRespo
     return False
 
 
-def service_tcp_connection(key, mask, sel, station, udpServerSocket, messageSentLogs):
+def service_tcp_connection(key, mask, sel, station, udpServerSocket, messageSentLogs, clientRequestLogs):
     request = False
     method = "GET"
     sock = key.fileobj
@@ -355,13 +381,16 @@ def service_tcp_connection(key, mask, sel, station, udpServerSocket, messageSent
                 # Create message
                 timestamp = ts.time()
                 msg = get_message_to_send(requestObject, station, timestamp)
-                print("Obtained message!")
-                # Check if message destination matches timetable destinations
+                clientRequestLog = ClientRequestLog(
+                    msg, sock, sel, data)
+                # print(f"CLIENT REQUEST LOG: {vars(clientRequestLog)}")
+                clientRequestLogs.addLog(clientRequestLog)
                 destFound, earliestTrip = findDestination(station, msg)
                 if destFound:
                     # if server is the source server, then send message back to client
                     request = send_response_to_client(
                         station, data, earliestTrip, sock, sel, "true")
+                    # clientRequestLogs.removeLog(msg)
                 if not destFound:
                     # if destination is not found, then pass message forward to other nodes
                     send_udp(key, mask, sel, station, msg,
@@ -398,6 +427,22 @@ def startUdpPort(station, sel):
     return udpServerSocket
 
 
+def remove_non_destination(message, station):
+    newEarliestTrips = []
+    destination = message["destinationName"]
+    earliestTrips = message["route"][message["hopCount"]]["earliestTrips"]
+    # create new list and add match to new list and replace old list
+    for trip in earliestTrips:
+        if trip[4] == destination:
+            newEarliestTrips.append(trip)
+    message["route"][message["hopCount"]]["earliestTrips"] = newEarliestTrips
+    return message
+
+
+def get_incoming_earliest_trip(message, station):
+    return message
+
+
 def add_station_to_route(message, station, timestamp):
     print(f"MESSAGE || : {message}")
     for trip in message["route"][message["hopCount"]]["earliestTrips"]:
@@ -410,7 +455,7 @@ def add_station_to_route(message, station, timestamp):
     return message
 
 
-def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSentLogs):
+def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSentLogs, clientRequestLogs):
     bytesAddressPair = udpServerSocket.recvfrom(
         station.HeaderSize)
     message_length = bytesAddressPair[0].decode()
@@ -433,7 +478,21 @@ def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSen
     # check if I am the source
     if msg["messageType"] == "incoming" and msg["sourceName"] == station.stationName:
         # return webpage with trip details
+        sock = key.fileobj
+        data = key.data
         print("It's for me!")
+        earliestTrips = []
+        for route in msg["route"]:
+            earliestTrips.append(route["earliestTrips"])
+        clientLog = clientRequestLogs.getLog(
+            msg)  # clientRequestLogs.logs[0]  #
+        print(f"SOCK: {clientLog.sock}")
+        print(f"DATA: {clientLog.data.addr}")
+        # print(f"raddr: {clientLog.sock.socket.getpeername()}")
+        # clientLog.sock.connect()
+        # clientSocket = socket.create_connection(clientLog.data.addr)
+        send_response_to_client(
+            station, clientLog.data, earliestTrips, clientLog.sock, clientLog.sel, "true")
     else:
         # add station to route
         timestamp = ts.time()
@@ -444,6 +503,7 @@ def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSen
         print(earliestTrip)
         # if station contains route to destination, then send back to source (incoming)
         if destFound:
+            msg = remove_non_destination(msg, station)
             send_udp_to_parent(key, mask, sel, station, msg,
                                udpServerSocket, messageSentLogs)
         # if station does not contain route to destination, then send to neighbours (outgoing)
@@ -454,14 +514,13 @@ def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSen
         #         #     "Hello from server.".encode(), address)
 
 
-def serveTcpUdpPort(station, sel, tcpServerSocket, udpServerSocket, messageSentLogs):
+def serveTcpUdpPort(station, sel, tcpServerSocket, udpServerSocket, messageSentLogs, clientRequestLogs):
     # wait for connection
     try:
         while True:
             # wait unitl registered file objects become ready and set a selector with no timeout
             # the call will block until file object becomes ready -- either TCP or UDP has an EVENT_READ
             events = sel.select(timeout=None)
-
             for key, mask in events:
                 # print(f"the key is: {key}.")
                 # print(f"the sockname is: {key.fileobj.getsockname()}.")
@@ -478,14 +537,14 @@ def serveTcpUdpPort(station, sel, tcpServerSocket, udpServerSocket, messageSentL
                     # if the listening socket is UDP
                     if key.fileobj.getsockname() == station.udp_address:
                         serviceUdpCommunication(
-                            key, mask, sel, station, udpServerSocket, messageSentLogs)
+                            key, mask, sel, station, udpServerSocket, messageSentLogs, clientRequestLogs)
 
                 # a client socket that has been accepted and now we need to service it i.e. has data
                 else:
                     if key.fileobj.getsockname() == station.tcp_address:
                         # print("TCP service connection!")
                         service_tcp_connection(
-                            key, mask, sel, station, udpServerSocket, messageSentLogs)
+                            key, mask, sel, station, udpServerSocket, messageSentLogs, clientRequestLogs)
 
             # conn, addr = tcpServerSocket.accept()  # accept new connection
             # handleTcpClient(station, conn, addr)
@@ -559,9 +618,10 @@ def main(argv):
     udpServerSocket = startUdpPort(station, sel)
     # create new message sent logs object to hold messages sent from the server
     messageSentLogs = MessageSentLogs()
+    clientRequestLogs = ClientRequestLogs()
     # Serve TCP and UDP ports
     serveTcpUdpPort(station, sel, tcpServerSocket,
-                    udpServerSocket, messageSentLogs)
+                    udpServerSocket, messageSentLogs, clientRequestLogs)
     # TODO: 1) Create the message when a new TCP client request is received
     # 2) check if destination matches the timetable records. If so, get the earliest time.
     # 3) if current station is the source, then respond back to client. Else if station is not source, then send message back to parent.
@@ -569,6 +629,8 @@ def main(argv):
     # TODO: if neighbour == destination, then use timing based on timetable
     # TODO: Design and implementation of a simple programming language independent protocol to exchange queries,
     # responses, and (possibly) control information between stations.
+    # TODO: go to the edges and return "not found" if destination not found
+    # TODO: create code to evaluate FastestTrip or LeastTransfers at each station
     # TODO: Ability to find a valid (but not necessarily optimal) route between origin and destination stations,
     # for varying sized transport-networks of 2, 3, 5, 10, and 20 stations (including transport-networks involving cycles),
     # with no station attempting to collate information about the whole transport-network; ability to support multiple, concurrent queries from different clients.
