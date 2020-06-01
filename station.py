@@ -262,7 +262,7 @@ def getRequestObject(request_body):
     return request_body_objects
 
 
-def send_udp(key, mask, sel, station, msg, udpServerSocket, messageSentLogs):
+def send_udp(station, msg, udpServerSocket, messageSentLogs):
     neighbours = station.neighbours
     print(f"Message to send: {msg}")
     msg_clean = json.dumps(msg)
@@ -322,7 +322,7 @@ def findDestination(station, msg):
     return False, []
 
 
-def send_udp_to_parent(key, mask, sel, station, msg, udpServerSocket, messageSentLogs):
+def send_udp_to_parent(station, msg, udpServerSocket, messageSentLogs):
     neighbours = station.neighbours
     print(f"Message to send: {msg}")
     msg["messageType"] = "incoming"
@@ -343,7 +343,7 @@ def send_udp_to_parent(key, mask, sel, station, msg, udpServerSocket, messageSen
     udpServerSocket.sendto(message, addressTuple)
 
 
-def send_response_to_client(station, data, earliestTrip, sock, sel, stationResponse):
+def send_response_to_client(station, data, earliestTrip, sock, sel, stationResponse, closeConn):
     sendData = "HTTP/1.1 200 OK\r\n"
     sendData += "Content-Type: text/html; charset=utf-8\r\n"
     sendData += "\r\n"
@@ -355,8 +355,9 @@ def send_response_to_client(station, data, earliestTrip, sock, sel, stationRespo
                                     stationResponse=stationResponse,
                                     responses=[earliestTrip])
     sock.send(sendData.encode())
-    sel.unregister(sock)
-    sock.close()
+    if closeConn:
+        sel.unregister(sock)
+        sock.close()
     return False
 
 
@@ -388,23 +389,24 @@ def service_tcp_connection(key, mask, sel, station, udpServerSocket, messageSent
                 destFound, earliestTrip = findDestination(station, msg)
                 if destFound:
                     # if server is the source server, then send message back to client
+                    print("DESTINATION WAS FOUND CLOSING SOCKET!!!!!!!!")
                     request = send_response_to_client(
-                        station, data, earliestTrip, sock, sel, "true")
-                    # clientRequestLogs.removeLog(msg)
+                        station, data, earliestTrip, sock, sel, "true", True)
+                    clientRequestLogs.removeLog(msg)
                 if not destFound:
                     # if destination is not found, then pass message forward to other nodes
-                    send_udp(key, mask, sel, station, msg,
+                    send_udp(station, msg,
                              udpServerSocket, messageSentLogs)
 
         else:  # the client has closed their socket so the server should too.
             print('closing connection to', data.addr)
-            sel.unregister(sock)
-            sock.close()
+            # sel.unregister(sock)
+            # sock.close()
     if mask & selectors.EVENT_WRITE:  # write the data back to the client
         # we have received, and now we can send
         if request:
             request = send_response_to_client(
-                station, data, [], sock, sel, "false")
+                station, data, [], sock, sel, "false", True)
 
 
 def startTcpPort(station, sel):
@@ -423,6 +425,7 @@ def startUdpPort(station, sel):
     udpServerSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     udpServerSocket.bind(station.udp_address)
     print(f"[LISTENING] UDP Server is listening on {station.udp_address}.")
+    udpServerSocket.setblocking(False)
     sel.register(udpServerSocket, selectors.EVENT_READ, data=None)
     return udpServerSocket
 
@@ -492,7 +495,7 @@ def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSen
         # clientLog.sock.connect()
         # clientSocket = socket.create_connection(clientLog.data.addr)
         send_response_to_client(
-            station, clientLog.data, earliestTrips, clientLog.sock, clientLog.sel, "true")
+            station, clientLog.data, earliestTrips, clientLog.sock, clientLog.sel, "true", True)
     else:
         # add station to route
         timestamp = ts.time()
@@ -504,11 +507,11 @@ def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSen
         # if station contains route to destination, then send back to source (incoming)
         if destFound:
             msg = remove_non_destination(msg, station)
-            send_udp_to_parent(key, mask, sel, station, msg,
+            send_udp_to_parent(station, msg,
                                udpServerSocket, messageSentLogs)
         # if station does not contain route to destination, then send to neighbours (outgoing)
         if not destFound:
-            send_udp(key, mask, sel, station, msg,
+            send_udp(station, msg,
                      udpServerSocket, messageSentLogs)
         #         # udpServerSocket.sendto(
         #         #     "Hello from server.".encode(), address)
@@ -522,16 +525,12 @@ def serveTcpUdpPort(station, sel, tcpServerSocket, udpServerSocket, messageSentL
             # the call will block until file object becomes ready -- either TCP or UDP has an EVENT_READ
             events = sel.select(timeout=None)
             for key, mask in events:
-                # print(f"the key is: {key}.")
-                # print(f"the sockname is: {key.fileobj.getsockname()}.")
-                # print(f"the mask is: {mask}.")
 
                 # a listening socket that hasn't been accepted yet i.e. no data
                 if key.data is None:
 
                     # if the listening socket is TCP
                     if key.fileobj.getsockname() == station.tcp_address:
-                        # print("TCP accept wrapper!")
                         accept_tcp_wrapper(key.fileobj, sel)
 
                     # if the listening socket is UDP
@@ -542,16 +541,13 @@ def serveTcpUdpPort(station, sel, tcpServerSocket, udpServerSocket, messageSentL
                 # a client socket that has been accepted and now we need to service it i.e. has data
                 else:
                     if key.fileobj.getsockname() == station.tcp_address:
-                        # print("TCP service connection!")
                         service_tcp_connection(
                             key, mask, sel, station, udpServerSocket, messageSentLogs, clientRequestLogs)
 
-            # conn, addr = tcpServerSocket.accept()  # accept new connection
-            # handleTcpClient(station, conn, addr)
     except KeyboardInterrupt:
         print("Caught keyboard interrupt, exiting")
-    finally:
-        sel.close()
+    # finally:
+    #     sel.close()
 
 
 def acceptInputs(argv):
