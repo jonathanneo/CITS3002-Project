@@ -237,7 +237,7 @@ html_content = """
 """
 
 
-def accept_tcp_wrapper(sock, sel):
+def acceptTcpWrapper(sock, sel):
     conn, addr = sock.accept()  # Should be ready to read
     # print('accepted connection from', addr)
     conn.setblocking(False)
@@ -284,7 +284,7 @@ def sendUdp(station, msg, udpServerSocket, messageSentLogs):
         print(f"Log index: {index} || {vars(log)}")
 
 
-def get_message_to_send(requestObject, station, timestamp):
+def getMessageToSend(requestObject, station, timestamp):
     destination = ""
     time = ""
     tripType = ""
@@ -379,7 +379,7 @@ def serviceTcpConnection(key, mask, sel, station, udpServerSocket, messageSentLo
                 requestObject = getRequestObject(requestBody)
                 # Create message
                 timestamp = ts.time()
-                msg = get_message_to_send(requestObject, station, timestamp)
+                msg = getMessageToSend(requestObject, station, timestamp)
                 clientRequestLog = ClientRequestLog(
                     msg, sock, sel, data)
                 # print(f"CLIENT REQUEST LOG: {vars(clientRequestLog)}")
@@ -533,7 +533,7 @@ def serveTcpUdpPort(station, sel, tcpServerSocket, udpServerSocket, messageSentL
                     # if the listening socket is TCP
                     try:
                         if key.fileobj.getsockname() == station.tcp_address:
-                            accept_tcp_wrapper(key.fileobj, sel)
+                            acceptTcpWrapper(key.fileobj, sel)
                     except:
                         pass
                     # if the listening socket is UDP
