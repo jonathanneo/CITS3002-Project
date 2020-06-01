@@ -474,7 +474,19 @@ def addStationToRoute(message, station, timestamp):
     return message
 
 
-def collateMessages(msg):
+def collateMessages(msg, messageBank):
+    tripType = msg["tripType"]
+
+    if tripType == "FastestTrip":
+        # always grab the latest one (to destination) if looking for fastests trip
+        earliestTime = msg["route"][-1]["earliestTrips"][0][4]
+        earliestMessage = msg
+        for message in messageBank:
+            compareEarliestTime = message["route"][-1]["earliestTrips"][0][4]
+            if compareEarliestTime < earliestTime:
+                earliestTime = compareEarliestTime
+                earliestMessage = message
+        return earliestMessage
 
     return None
 
@@ -518,11 +530,14 @@ def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSen
         else:
             # add message to message bank and remove from MessageSentLog
             messageBank.addMessage(msg)
-            removedLog = messageSentLogs.removeLog()
+            destinationStationAddress = f"http://{address[0]}:{address[1]}"
+            removeTimestamp = msg["route"][msg["hopCount"]]["timestamp"]
+            removedLog = messageSentLogs.removeLog(
+                destinationStationAddress, removeTimestamp)
             # if messageSentLog for message is empty, then collate messages from message bank and send back to parent
             if messageSentLogs.getLogs(removedLog["parentAddress"], removedLog["timestamp"]) == None:
                 print("That's all folks!")
-                collatedMessage = collateMessages(msg)
+                collatedMessage = collateMessages(msg, messageBank)
                 sendUdpToParent(station, collatedMessage,
                                 udpServerSocket, messageSentLogs)
 
