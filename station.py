@@ -498,7 +498,7 @@ def startUdpPort(station, sel):
     udpServerSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     udpServerSocket.bind(station.udp_address)
     print(f"[LISTENING] UDP Server is listening on {station.udp_address}.")
-    udpServerSocket.setblocking(False)
+    # udpServerSocket.setblocking(False)
     sel.register(udpServerSocket, selectors.EVENT_READ, data=None)
     return udpServerSocket
 
@@ -730,8 +730,6 @@ def checkAndUpdateTimetable(station, path, osstat):
     if osstat.st_mtime != os.stat(path).st_mtime:
         timetable, stationCoordinates = readTimetable(path)
         station.setTimetable(timetable)
-        print(
-            "---------------------- STATION TIME TABLE UPDATED --------------------------")
         return os.stat(path)
     return osstat
 
@@ -839,7 +837,6 @@ def main(argv):
     # TODO: Ability to find a valid (but not necessarily optimal) route between origin and destination stations,
     # for varying sized transport-networks of 2, 3, 5, 10, and 20 stations (including transport-networks involving cycles),
     # with no station attempting to collate information about the whole transport-network; ability to support multiple, concurrent queries from different clients.
-    # TODO: check if timetable file has updated using stat()
     # TODO: commenting, separating python files, throwing errors
 
     return None
