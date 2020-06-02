@@ -1,6 +1,7 @@
 import socket
 import selectors
 import types
+import os
 import sys
 import csv
 import pathlib
@@ -35,11 +36,11 @@ class Station:
         self.format = FORMAT
         self.neighbours = []
 
-    def addCoordinates(self, x, y):
+    def setCoordinates(self, x, y):
         self.x = x
         self.y = y
 
-    def addTimetable(self, timetable):
+    def setTimetable(self, timetable):
         self.timetable = timetable
 
     def addNeighbour(self, neighbour):
@@ -709,7 +710,33 @@ def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSen
                 sendUdpToParent(station, msg, udpServerSocket, 0)
 
 
-def serveTcpUdpPort(station, sel, tcpServerSocket, udpServerSocket, messageSentLogs, clientRequestLogs, messageBank):
+def readTimetable(filepath):
+    timetable = []
+    rowCount = 0
+    with open(filepath, 'r') as file:
+        reader = csv.reader(file, delimiter=',')
+        for row in reader:
+            if rowCount == 0:
+                stationCoordinates = row
+
+            else:
+                timetable.append(row)
+            rowCount = rowCount+1
+
+    return timetable, stationCoordinates
+
+
+def checkAndUpdateTimetable(station, path, osstat):
+    if osstat.st_mtime != os.stat(path).st_mtime:
+        timetable, stationCoordinates = readTimetable(path)
+        station.setTimetable(timetable)
+        print(
+            "---------------------- STATION TIME TABLE UPDATED --------------------------")
+        return os.stat(path)
+    return osstat
+
+
+def serveTcpUdpPort(station, sel, tcpServerSocket, udpServerSocket, messageSentLogs, clientRequestLogs, messageBank, path, osstat):
     # wait for connection
     try:
         while True:
@@ -717,6 +744,8 @@ def serveTcpUdpPort(station, sel, tcpServerSocket, udpServerSocket, messageSentL
             # the call will block until file object becomes ready -- either TCP or UDP has an EVENT_READ
             events = sel.select(timeout=None)
             for key, mask in events:
+                # check and update timetable each time a new event is triggered
+                osstat = checkAndUpdateTimetable(station, path, osstat)
                 # a listening socket that hasn't been accepted yet i.e. no data
                 if key.data is None:
 
@@ -771,22 +800,6 @@ def acceptInputs(argv):
     return station
 
 
-def readTimetable(filepath):
-    timetable = []
-    rowCount = 0
-    with open(filepath, 'r') as file:
-        reader = csv.reader(file, delimiter=',')
-        for row in reader:
-            if rowCount == 0:
-                stationCoordinates = row
-
-            else:
-                timetable.append(row)
-            rowCount = rowCount+1
-
-    return timetable, stationCoordinates
-
-
 def main(argv):
     # store config and neighbours from inputs
     station = acceptInputs(argv)
@@ -798,12 +811,13 @@ def main(argv):
     # Read CSV timetable file -- assume that all contents are correct
     path = str(pathlib.Path(__file__).parent.absolute()) + \
         f"/tt-{station.stationName}"
-    print(path)
+    osstat = os.stat(path)
+    print(osstat)
     timetable, stationCoordinates = readTimetable(path)
-    station.addCoordinates(
+    station.setCoordinates(
         float(stationCoordinates[1]), float(stationCoordinates[2]))  # add coordinates
     print(f"X: {station.x} | Y : {station.y} ")
-    station.addTimetable(timetable)
+    station.setTimetable(timetable)
     print("timetable: ")
     svrTimetable = station.timetable
     for row in svrTimetable:
@@ -820,19 +834,13 @@ def main(argv):
     messageBank = MessageBank()
     # Serve TCP and UDP ports
     serveTcpUdpPort(station, sel, tcpServerSocket,
-                    udpServerSocket, messageSentLogs, clientRequestLogs, messageBank)
-    # 4) if destination doesn't match, then forward on the message to neighbours (append station object to message route[]), but not to the parent.
-    # TODO: Design and implementation of a simple programming language independent protocol to exchange queries,
-    # responses, and (possibly) control information between stations.
-    # TODO: !!go to the edges and return "not found" if destination not found
-    # TODO: create code to evaluate FastestTrip or LeastTransfers at each station
+                    udpServerSocket, messageSentLogs, clientRequestLogs, messageBank, path, osstat)
+
     # TODO: Ability to find a valid (but not necessarily optimal) route between origin and destination stations,
     # for varying sized transport-networks of 2, 3, 5, 10, and 20 stations (including transport-networks involving cycles),
     # with no station attempting to collate information about the whole transport-network; ability to support multiple, concurrent queries from different clients.
-    # TODO: Ability to detect and report when a valid route does not exist (on the current day).
-    # TODO: look into JSON encoding issue: https://stackoverflow.com/questions/5160077/encoding-nested-python-object-in-json
     # TODO: check if timetable file has updated using stat()
-    # TODO: Remove instant transit
+    # TODO: commenting, separating python files, throwing errors
 
     return None
 
