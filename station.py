@@ -15,13 +15,13 @@ import copy
 SERVER = "127.0.0.1"
 FORMAT = "UTF-8"
 TRIP_TYPE = ["FastestTrip"]
-HEADER_SIZE = 64
+MESSAGE_SIZE = 8192
 
 
 class Station:
     def __init__(self, station, tcp_port, udp_port):
         self.stationName = station
-        self.HeaderSize = HEADER_SIZE
+        self.MessageSize = MESSAGE_SIZE
         if tcp_port == None:
             self.tcp_port = 0
         else:
@@ -135,22 +135,16 @@ class MessageSentLogs:
 
     def removeLog(self, destinationStationAddress, timestamp):
         for record in self.logs:
-            print(f"Record to check {vars(record)}")
-            print(f"destination adddress: {destinationStationAddress}")
-            print(f"timestamp: {timestamp}")
             if str(record.destinationStationAddress) == str(destinationStationAddress) and str(record.timestamp) == str(timestamp):
                 self.logs.remove(record)
-                print(f"Removed record: {vars(record)}")
                 return record
         return None
 
     def getLogs(self, parentAddress, timestamp):
         foundLog = []
         for record in self.logs:
-            print(f"record: {record}")
             if str(record.parentAddress) == str(parentAddress) and str(record.timestamp) == str(timestamp):
                 foundLog.append(record)
-                print(f"found: {record}")
         if len(foundLog) > 0:
             return foundLog
         else:
@@ -329,9 +323,6 @@ def sendUdp(station, msg, udpServerSocket, messageSentLogs):
     neighbours = station.neighbours
     msg_clean = json.dumps(msg)
     message = msg_clean.encode(FORMAT)
-    msg_length = len(message)
-    send_length = str(msg_length).encode(FORMAT)
-    send_length += b" " * (station.HeaderSize - len(send_length))
 
     # send to each neighbour
     for neighbour in neighbours:
@@ -343,13 +334,8 @@ def sendUdp(station, msg, udpServerSocket, messageSentLogs):
         if send:
             newLog = MessageSentLog(
                 msg["route"][msg["hopCount"]]["timestamp"], "", station.getStationUDPAddress(), neighbour.getStationUDPAddress())
-            print(f"||||||| Added to messageSentLog: {vars(newLog)}")
             messageSentLogs.addLog(newLog)
-            udpServerSocket.sendto(send_length, neighbour.udp_address)
             udpServerSocket.sendto(message, neighbour.udp_address)
-
-    # for index, log in enumerate(messageSentLogs.logs):
-    #     print(f"Log index: {index} || {vars(log)}")
 
 
 def getMessageToSend(requestObject, station, timestamp):
@@ -391,19 +377,13 @@ def sendUdpToParent(station, msg, udpServerSocket, numRouteAdded):
     msg["messageType"] = "incoming"
     msg["hopCount"] = msg["hopCount"] - numRouteAdded
     msg_clean = json.dumps(msg)
-    print(f"MESSAGE TO PARENT : {msg_clean}")
-
     message = msg_clean.encode(FORMAT)
-    msg_length = len(message)
-    send_length = str(msg_length).encode(FORMAT)
-    send_length += b" " * (station.HeaderSize - len(send_length))
 
     # get parent
     parent = msg["route"][msg["hopCount"]]
     # send to parent
     addressList = parent["stationUDPAddress"].strip("http://").split(":")
     addressTuple = (addressList[0], int(addressList[1]))
-    udpServerSocket.sendto(send_length, addressTuple)
     udpServerSocket.sendto(message, addressTuple)
 
 
@@ -614,10 +594,7 @@ def checkStationInEarliestTrips(msg, station):
 
 def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSentLogs, clientRequestLogs, messageBank):
     bytesAddressPair = udpServerSocket.recvfrom(
-        station.HeaderSize)
-    message_length = bytesAddressPair[0].decode()
-    bytesAddressPair = udpServerSocket.recvfrom(
-        int(message_length))
+        station.MessageSize)
     message = bytesAddressPair[0].decode()
     print(f"Message: {message}")
     msg = json.loads(message)  # load msg
