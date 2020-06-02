@@ -13,7 +13,7 @@ import copy
 # CONSTANTS
 SERVER = "127.0.0.1"
 FORMAT = "UTF-8"
-TRIP_TYPE = ["FastestTrip", "LeastTransfers"]
+TRIP_TYPE = ["FastestTrip"]
 HEADER_SIZE = 64
 
 
@@ -385,7 +385,7 @@ def findDestination(station, msg):
     return False, []
 
 
-def sendUdpToParent(station, msg, udpServerSocket, messageSentLogs, numRouteAdded):
+def sendUdpToParent(station, msg, udpServerSocket, numRouteAdded):
     neighbours = station.neighbours
     msg["messageType"] = "incoming"
     msg["hopCount"] = msg["hopCount"] - numRouteAdded
@@ -516,6 +516,7 @@ def removeNonDestination(message, station):
 
 def addStationToRoute(message, station, timestamp):
     for trip in message["route"][message["hopCount"]]["earliestTrips"]:
+        print(f"trip: {trip}")
         if trip[4] == station.stationName:
             lastRouteTime = trip[3]
     stationObject = station.getStationObject(timestamp, lastRouteTime)
@@ -601,6 +602,14 @@ def routeEnd(station, msg):
     return True
 
 
+def checkStationInEarliestTrips(msg, station):
+    for trip in msg["route"][msg["hopCount"]]["earliestTrips"]:
+        print(f"trip: {trip}")
+        if trip[4] == station.stationName:
+            return True  # yes this message was intended for me
+    return False  # no this message was not intended for me
+
+
 def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSentLogs, clientRequestLogs, messageBank):
     bytesAddressPair = udpServerSocket.recvfrom(
         station.HeaderSize)
@@ -608,12 +617,12 @@ def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSen
     bytesAddressPair = udpServerSocket.recvfrom(
         int(message_length))
     message = bytesAddressPair[0].decode()
+    print(f"Message: {message}")
     msg = json.loads(message)  # load msg
     address = bytesAddressPair[1]
     destinationMsg = f"Message from Client:{message}"
     destinationIP = f"Destination IP Address:{address}"
-    print(destinationIP)
-    print(f"Message: {msg}")
+    print(f"msg from: {destinationIP}")
 
     # message is incoming
     if msg["messageType"] == "incoming":
@@ -658,8 +667,7 @@ def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSen
             if messageSentLogs.getLogs(removedLog.parentAddress, removedLog.timestamp) == None:
                 print("That's all folks!")
                 collatedMessage = collateMessages(msg, messageBank)
-                sendUdpToParent(station, collatedMessage,
-                                udpServerSocket, messageSentLogs, 1)
+                sendUdpToParent(station, collatedMessage, udpServerSocket, 1)
 
                 print("message sent to parent")
 
@@ -668,30 +676,33 @@ def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSen
         if msg["sourceName"] == station.stationName:
             print("dead end found!")
             msg["routeEndFound"] = True
-            sendUdpToParent(station, msg,
-                            udpServerSocket, messageSentLogs, 0)
+            sendUdpToParent(station, msg, udpServerSocket, 0)
         else:
-            # add station to route
-            timestamp = ts.time()
-            msg = addStationToRoute(msg, station, timestamp)
-            # check if destination is found
-            destFound, earliestTrip = findDestination(station, msg)
-            routeEndFound = routeEnd(station, msg)
-            # if station contains route to destination, then send back to source
-            if destFound:
-                msg = removeNonDestination(msg, station)
-                sendUdpToParent(station, msg,
-                                udpServerSocket, messageSentLogs, 1)
-                print("message sent to parent")
-            # if station does not contain route to destination, then send to neighbours (outgoing)
-            if destFound == False and routeEndFound == False:
-                sendUdp(station, msg,
-                        udpServerSocket, messageSentLogs)
-            if destFound == False and routeEndFound == True:
-                print("dead end found!")
+            messageIntended = checkStationInEarliestTrips(msg, station)
+            # only perform actions if the message was intended for the station
+            if messageIntended:
+                # add station to route
+                timestamp = ts.time()
+                msg = addStationToRoute(msg, station, timestamp)
+                # check if destination is found
+                destFound, earliestTrip = findDestination(station, msg)
+                routeEndFound = routeEnd(station, msg)
+                # if station contains route to destination, then send back to source
+                if destFound:
+                    msg = removeNonDestination(msg, station)
+                    sendUdpToParent(station, msg, udpServerSocket, 1)
+                    print("message sent to parent")
+                # if station does not contain route to destination, then send to neighbours (outgoing)
+                if destFound == False and routeEndFound == False:
+                    sendUdp(station, msg,
+                            udpServerSocket, messageSentLogs)
+                if destFound == False and routeEndFound == True:
+                    print("dead end found!")
+                    msg["routeEndFound"] = True
+                    sendUdpToParent(station, msg, udpServerSocket, 1)
+            else:
                 msg["routeEndFound"] = True
-                sendUdpToParent(station, msg,
-                                udpServerSocket, messageSentLogs, 1)
+                sendUdpToParent(station, msg, udpServerSocket, 0)
 
 
 def serveTcpUdpPort(station, sel, tcpServerSocket, udpServerSocket, messageSentLogs, clientRequestLogs, messageBank):
