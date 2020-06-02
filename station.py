@@ -452,7 +452,7 @@ def serviceTcpConnection(key, mask, sel, station, udpServerSocket, messageSentLo
                 # Request has been received!
                 requestObject = getRequestObject(requestBody)
                 # Create message
-                messageId = incrementMessageId(MessageID)
+                messageId = uuid.uuid1().int
                 print(
                     f"StationName: {station.stationName} || Message ID: {messageId}")
                 msg = getMessageToSend(requestObject, station, messageId)
@@ -646,7 +646,12 @@ def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSen
                 f"attempting to remove messageId: {removeMessageId} || parentAddress: {parentAddress} || destinationStationAddress: {destinationStationAddress}")
             removedLog = messageSentLogs.removeLog(
                 parentAddress, destinationStationAddress, removeMessageId)
+            if removedLog == None:
+                raise Exception(
+                    f"@@@@@@@@@@@@@@@@@@@@@@@@@@ Failed to remove messageId: {removeMessageId} || parentAddress: {parentAddress} || destinationStationAddress: {destinationStationAddress} \
+                        from {' '.join(map(str,messageSentLogs.logs))}")
             print(f"Removal successful.")
+
             if messageSentLogs.getLogs(removedLog.parentAddress, removedLog.messageId) == None:
                 # return webpage with trip details
                 collatedMessage = collateMessages(msg, messageBank)
@@ -679,6 +684,10 @@ def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSen
                 f"attempting to remove messageId: {removeMessageId} || parentAddress: {parentAddress} || destinationStationAddress: {destinationStationAddress}")
             removedLog = messageSentLogs.removeLog(
                 parentAddress, destinationStationAddress, removeMessageId)
+            if removedLog == None:
+                raise Exception(
+                    f"@@@@@@@@@@@@@@@@@@@@@@@@@@ Failed to remove messageId: {removeMessageId} || parentAddress: {parentAddress} || destinationStationAddress: {destinationStationAddress} \
+                        from {' '.join(map(str,messageSentLogs.logs))}")
             print(f"Removal successful.")
             # print(
             #     f"station: {station.stationName} || Removed Log: {vars(removedLog)}")
@@ -691,7 +700,8 @@ def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSen
                 #     print(
                 #         f"Station: {station.stationName} || Message Bank Index:{index} || Message: {message} ")
                 # print("Calling send udp parent function")
-                sendUdpToParent(station, collatedMessage, udpServerSocket, 1)
+                sendUdpToParent(station, collatedMessage,
+                                udpServerSocket, 1)
                 print(
                     f"station: {station.stationName} || Message sent to parent successfully. now awaiting the following other messages:")
                 for index, log in enumerate(messageSentLogs.logs):
@@ -720,8 +730,8 @@ def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSen
             # only perform actions if the message was intended for the station
             if messageIntended:
                 # add station to route
-                messageId = incrementMessageId(MessageID)
-                print(f"Obtained message id: {messageId}")
+                messageId = uuid.uuid1().int
+                print(f"Obtained message messageId: {messageId}")
                 msg = addStationToRoute(msg, station, messageId)
                 print(f"Added this station to the route")
                 # check if destination is found
