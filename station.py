@@ -96,9 +96,13 @@ class ClientRequestLogs:
         self.logs.append(log)
 
     def removeLog(self, msg):
+        removedLogs = []
         for log in self.logs:
             if log.msg["sourceName"] == msg["sourceName"] and log.msg["destinationName"] == msg["destinationName"] and log.msg["timestamp"] == msg["timestamp"]:
-                self.logs.remove(log)
+                removedLogs.append(log)
+        for removedLog in removedLogs:
+            self.logs.remove(removedLog)
+        return removedLogs
 
     def getLog(self, msg):
         for log in self.logs:
@@ -129,8 +133,12 @@ class MessageSentLogs:
 
     def removeLog(self, destinationStationAddress, timestamp):
         for record in self.logs:
+            print(f"Record to check {vars(record)}")
+            print(f"destination adddress: {destinationStationAddress}")
+            print(f"timestamp: {timestamp}")
             if str(record.destinationStationAddress) == str(destinationStationAddress) and str(record.timestamp) == str(timestamp):
                 self.logs.remove(record)
+                print(f"Removed record: {vars(record)}")
                 return record
         return None
 
@@ -174,9 +182,16 @@ class MessageBank:
     def removeMessage(self, sourceName, destinationName, timestamp):
         removedMessages = []
         for message in self.bank:
+            print(f"Message in bank: {message}")
             if message["sourceName"] == sourceName and message["destinationName"] == destinationName and message["timestamp"] == timestamp:
                 removedMessages.append(message)
-                self.bank.remove(message)
+
+        for removedMessage in removedMessages:
+            self.bank.remove(removedMessage)
+            print(f"|||| Message bank removed message: {message}")
+
+        for message in self.bank:
+            print(f"Message left in bank: {message}")
 
         return removedMessages
 
@@ -325,7 +340,8 @@ def sendUdp(station, msg, udpServerSocket, messageSentLogs):
                 send = False
         if send:
             newLog = MessageSentLog(
-                msg["timestamp"], "", station.getStationUDPAddress(), neighbour.getStationUDPAddress())
+                msg["route"][msg["hopCount"]]["timestamp"], "", station.getStationUDPAddress(), neighbour.getStationUDPAddress())
+            print(f"||||||| Added to messageSentLog: {vars(newLog)}")
             messageSentLogs.addLog(newLog)
             udpServerSocket.sendto(send_length, neighbour.udp_address)
             udpServerSocket.sendto(message, neighbour.udp_address)
@@ -616,7 +632,7 @@ def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSen
                 destinationStationAddress, removeTimestamp)
             # if messageSentLog for message is empty, then collate messages from message bank and send back to parent
             # TODO : change removedLog[""] to removedLog.object
-            if messageSentLogs.getLogs(removedLog["parentAddress"], removedLog["timestamp"]) == None:
+            if messageSentLogs.getLogs(removedLog.parentAddress, removedLog.timestamp) == None:
                 print("That's all folks!")
                 collatedMessage = collateMessages(msg, messageBank)
                 sendUdpToParent(station, collatedMessage,
