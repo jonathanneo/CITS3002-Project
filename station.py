@@ -15,13 +15,13 @@ import copy
 SERVER = "127.0.0.1"
 FORMAT = "UTF-8"
 TRIP_TYPE = ["FastestTrip"]
-HEADER_SIZE = 64
+MESSAGE_SIZE = 8192
 
 
 class Station:
     def __init__(self, station, tcp_port, udp_port):
         self.stationName = station
-        self.HeaderSize = HEADER_SIZE
+        self.MessageSize = MESSAGE_SIZE
         if tcp_port == None:
             self.tcp_port = 0
         else:
@@ -108,12 +108,6 @@ class ClientRequestLogs:
 
     def getLog(self, msg):
         for log in self.logs:
-            print(
-                f"sourceName1: {log.msg['sourceName']} || sourceName2: {msg['sourceName']}")
-            print(
-                f"sourceName1: {log.msg['destinationName']} || sourceName2: {msg['destinationName']}")
-            print(
-                f"sourceName1: {datetime.fromtimestamp(log.msg['timestamp'])} || sourceName2: {datetime.fromtimestamp(msg['timestamp'])}")
             if log.msg["sourceName"] == msg["sourceName"] and log.msg["destinationName"] == msg["destinationName"] and log.msg["timestamp"] == msg["timestamp"]:
                 return log
 
@@ -134,23 +128,18 @@ class MessageSentLogs:
         self.logs.append(log)
 
     def removeLog(self, destinationStationAddress, timestamp):
+
         for record in self.logs:
-            print(f"Record to check {vars(record)}")
-            print(f"destination adddress: {destinationStationAddress}")
-            print(f"timestamp: {timestamp}")
             if str(record.destinationStationAddress) == str(destinationStationAddress) and str(record.timestamp) == str(timestamp):
                 self.logs.remove(record)
-                print(f"Removed record: {vars(record)}")
                 return record
         return None
 
     def getLogs(self, parentAddress, timestamp):
         foundLog = []
         for record in self.logs:
-            print(f"record: {record}")
             if str(record.parentAddress) == str(parentAddress) and str(record.timestamp) == str(timestamp):
                 foundLog.append(record)
-                print(f"found: {record}")
         if len(foundLog) > 0:
             return foundLog
         else:
@@ -184,16 +173,12 @@ class MessageBank:
     def removeMessage(self, sourceName, destinationName, timestamp):
         removedMessages = []
         for message in self.bank:
-            print(f"Message in bank: {message}")
+            # print(f"Message in bank: {message}")
             if message["sourceName"] == sourceName and message["destinationName"] == destinationName and message["timestamp"] == timestamp:
                 removedMessages.append(message)
 
         for removedMessage in removedMessages:
             self.bank.remove(removedMessage)
-            print(f"|||| Message bank removed message: {message}")
-
-        for message in self.bank:
-            print(f"Message left in bank: {message}")
 
         return removedMessages
 
@@ -329,9 +314,6 @@ def sendUdp(station, msg, udpServerSocket, messageSentLogs):
     neighbours = station.neighbours
     msg_clean = json.dumps(msg)
     message = msg_clean.encode(FORMAT)
-    msg_length = len(message)
-    send_length = str(msg_length).encode(FORMAT)
-    send_length += b" " * (station.HeaderSize - len(send_length))
 
     # send to each neighbour
     for neighbour in neighbours:
@@ -343,13 +325,14 @@ def sendUdp(station, msg, udpServerSocket, messageSentLogs):
         if send:
             newLog = MessageSentLog(
                 msg["route"][msg["hopCount"]]["timestamp"], "", station.getStationUDPAddress(), neighbour.getStationUDPAddress())
-            print(f"||||||| Added to messageSentLog: {vars(newLog)}")
+            if station.stationName == "BusportL":
+                print(f"||||||| Added to messageSentLog: \n || {vars(newLog)}")
+                with open('messageSentLog.csv', mode='a') as logFile:
+                    logFile = csv.writer(logFile, delimiter=',', quotechar='"')
+                    logFile.writerow(
+                        [newLog.destinationStationAddress, newLog.timestamp, newLog.parentAddress])
             messageSentLogs.addLog(newLog)
-            udpServerSocket.sendto(send_length, neighbour.udp_address)
             udpServerSocket.sendto(message, neighbour.udp_address)
-
-    # for index, log in enumerate(messageSentLogs.logs):
-    #     print(f"Log index: {index} || {vars(log)}")
 
 
 def getMessageToSend(requestObject, station, timestamp):
@@ -391,19 +374,12 @@ def sendUdpToParent(station, msg, udpServerSocket, numRouteAdded):
     msg["messageType"] = "incoming"
     msg["hopCount"] = msg["hopCount"] - numRouteAdded
     msg_clean = json.dumps(msg)
-    print(f"MESSAGE TO PARENT : {msg_clean}")
-
     message = msg_clean.encode(FORMAT)
-    msg_length = len(message)
-    send_length = str(msg_length).encode(FORMAT)
-    send_length += b" " * (station.HeaderSize - len(send_length))
-
     # get parent
     parent = msg["route"][msg["hopCount"]]
     # send to parent
     addressList = parent["stationUDPAddress"].strip("http://").split(":")
     addressTuple = (addressList[0], int(addressList[1]))
-    udpServerSocket.sendto(send_length, addressTuple)
     udpServerSocket.sendto(message, addressTuple)
 
 
@@ -517,11 +493,10 @@ def removeNonDestination(message, station):
 
 def addStationToRoute(message, station, timestamp):
     for trip in message["route"][message["hopCount"]]["earliestTrips"]:
-        print(f"trip: {trip}")
+        # print(f"trip: {trip}")
         if trip[4] == station.stationName:
             lastRouteTime = trip[3]
     stationObject = station.getStationObject(timestamp, lastRouteTime)
-    # print(f"station object: {stationObject}")
     message["route"].append(stationObject)
     message["hopCount"] = message["hopCount"] + 1
     return message
@@ -531,11 +506,9 @@ def collateMessages(msg, messageBank):
     tripType = msg["tripType"]
     numCompleteRoute = 0
     for message in messageBank.bank:
-        # print(f'route not found check: {message["routeEndFound"]}')
         if message["routeEndFound"] == False:
             numCompleteRoute = numCompleteRoute + 1
 
-    print(f"num of complete route: {numCompleteRoute}")
     if numCompleteRoute == 0:
         return msg
 
@@ -547,14 +520,12 @@ def collateMessages(msg, messageBank):
                 earliestMessage = message
                 break
         for message in messageBank.bank:
-            print(f"||| Message in message bank: {message}")
             if len(message["route"][-1]["earliestTrips"]) > 0:
                 compareEarliestTime = message["route"][-1]["earliestTrips"][0][4]
                 if compareEarliestTime < earliestTime and message["routeEndFound"] == False:
                     earliestTime = compareEarliestTime
                     earliestMessage = message
 
-        print(f"earliestMessage : {earliestMessage}")
         messageBank.removeMessage(
             earliestMessage["sourceName"], earliestMessage["destinationName"], earliestMessage["timestamp"])
         return earliestMessage
@@ -606,7 +577,7 @@ def routeEnd(station, msg):
 
 def checkStationInEarliestTrips(msg, station):
     for trip in msg["route"][msg["hopCount"]]["earliestTrips"]:
-        print(f"trip: {trip}")
+        # print(f"trip: {trip}")
         if trip[4] == station.stationName:
             return True  # yes this message was intended for me
     return False  # no this message was not intended for me
@@ -614,32 +585,34 @@ def checkStationInEarliestTrips(msg, station):
 
 def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSentLogs, clientRequestLogs, messageBank):
     bytesAddressPair = udpServerSocket.recvfrom(
-        station.HeaderSize)
-    message_length = bytesAddressPair[0].decode()
-    bytesAddressPair = udpServerSocket.recvfrom(
-        int(message_length))
+        station.MessageSize)
     message = bytesAddressPair[0].decode()
     print(f"Message: {message}")
     msg = json.loads(message)  # load msg
+
     address = bytesAddressPair[1]
     destinationMsg = f"Message from Client:{message}"
     destinationIP = f"Destination IP Address:{address}"
     print(f"msg from: {destinationIP}")
 
     # message is incoming
+    if type(msg) == int:
+        raise Exception(
+            f"Message from: {destinationIP} \n || \n || Message: {message} ")
     if msg["messageType"] == "incoming":
         # check if I am the source
         if msg["sourceName"] == station.stationName:
             # add message to message bank and remove from MessageSentLog
             messageBank.addMessage(msg)
+            print(
+                f"message has been added to {station.stationName} message bank")
             destinationStationAddress = f"http://{address[0]}:{address[1]}"
+            print(f"message was from: {destinationStationAddress}")
+            # for log, index in enumerate(messageSentLogs.logs):
+            #     print(f"Log {index} in message sent logs: {log}")
             removeTimestamp = msg["route"][msg["hopCount"]]["timestamp"]
             removedLog = messageSentLogs.removeLog(
                 destinationStationAddress, removeTimestamp)
-            print(f"Removed Log: {vars(removedLog)}")
-            # print(f"Message sent logs: {vars(messageSentLogs.logs[0])}")
-            print(f"removed log parent address: {removedLog.parentAddress}")
-            print(f"removed log timestamp: {removedLog.timestamp}")
             if messageSentLogs.getLogs(removedLog.parentAddress, removedLog.timestamp) == None:
                 # return webpage with trip details
                 collatedMessage = collateMessages(msg, messageBank)
@@ -653,14 +626,10 @@ def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSen
                         earliestTrips.append(route["earliestTrips"][0])
                 clientLog = clientRequestLogs.getLog(
                     collatedMessage)
-                print(f"routeEndFound: {routeEndFound}")
-                print(f"client Log: {vars(clientLog)}")
                 sendResponseToClient(
                     station, clientLog.data, earliestTrips, clientLog.sock, clientLog.sel, "true", routeEndFound)
                 removedClientLogs = clientRequestLogs.removeLog(
                     collatedMessage)
-                for log in removedClientLogs:
-                    print(f"Removed client logs: {vars(log)}")
         else:
             # add message to message bank and remove from MessageSentLog
             messageBank.addMessage(msg)
@@ -668,12 +637,21 @@ def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSen
             removeTimestamp = msg["route"][msg["hopCount"]]["timestamp"]
             removedLog = messageSentLogs.removeLog(
                 destinationStationAddress, removeTimestamp)
+            if station.stationName == "BusportL":
+                print(
+                    "--------------------------------------- REMOVED LOG ----------------------------------------\n")
+                print(f"Removed Log: {vars(removedLog)}")
+            if removedLog == None:
+                raise Exception(
+                    f"StationName: {station.stationName} \n || Receiving from: {destinationStationAddress} \n || message content: {message} \n \
+                        totalMessageSentlogs: {len(messageSentLogs.logs)} \n || messageSentLog1: {vars(messageSentLogs.logs[0])} \n || messageSentLog2: {vars(messageSentLogs.logs[1])} \n \
+                            || messageSentLog3: {vars(messageSentLogs.logs[2])} \n")
+
             # if messageSentLog for message is empty, then collate messages from message bank and send back to parent
             if messageSentLogs.getLogs(removedLog.parentAddress, removedLog.timestamp) == None:
                 print("That's all folks!")
                 collatedMessage = collateMessages(msg, messageBank)
                 sendUdpToParent(station, collatedMessage, udpServerSocket, 1)
-
                 print("message sent to parent")
 
     # message is outgoing
@@ -748,20 +726,13 @@ def serveTcpUdpPort(station, sel, tcpServerSocket, udpServerSocket, messageSentL
                 if key.data is None:
 
                     # if the listening socket is TCP
-                    # try:
                     if key.fileobj.getsockname() == station.tcp_address:
                         acceptTcpWrapper(key.fileobj, sel)
-                    # except:
-                    #     print("fail listen tcp")
-                    #     pass
+
                     # if the listening socket is UDP
-                    # try:
                     if key.fileobj.getsockname() == station.udp_address:
                         serviceUdpCommunication(
                             key, mask, sel, station, udpServerSocket, messageSentLogs, clientRequestLogs, messageBank)
-                    # except:
-                    #     print("fail listen udp")
-                    #     pass
 
                 # a client socket that has been accepted and now we need to service it i.e. has data
                 else:
@@ -837,6 +808,7 @@ def main(argv):
     # TODO: Ability to find a valid (but not necessarily optimal) route between origin and destination stations,
     # for varying sized transport-networks of 2, 3, 5, 10, and 20 stations (including transport-networks involving cycles),
     # with no station attempting to collate information about the whole transport-network; ability to support multiple, concurrent queries from different clients.
+    # TODO: Fix try error
     # TODO: commenting, separating python files, throwing errors
 
     return None
