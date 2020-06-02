@@ -547,10 +547,11 @@ def collateMessages(msg, messageBank):
                 break
         for message in messageBank.bank:
             print(f"||| Message in message bank: {message}")
-            compareEarliestTime = message["route"][-1]["earliestTrips"][0][4]
-            if compareEarliestTime < earliestTime and message["routeEndFound"] == False:
-                earliestTime = compareEarliestTime
-                earliestMessage = message
+            if len(message["route"][-1]["earliestTrips"]) > 0:
+                compareEarliestTime = message["route"][-1]["earliestTrips"][0][4]
+                if compareEarliestTime < earliestTime and message["routeEndFound"] == False:
+                    earliestTime = compareEarliestTime
+                    earliestMessage = message
 
         print(f"earliestMessage : {earliestMessage}")
         messageBank.removeMessage(
@@ -652,10 +653,13 @@ def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSen
                 clientLog = clientRequestLogs.getLog(
                     collatedMessage)
                 print(f"routeEndFound: {routeEndFound}")
-                print(f"client Log: {clientLog}")
+                print(f"client Log: {vars(clientLog)}")
                 sendResponseToClient(
                     station, clientLog.data, earliestTrips, clientLog.sock, clientLog.sel, "true", routeEndFound)
-                clientRequestLogs.removeLog(collatedMessage)
+                removedClientLogs = clientRequestLogs.removeLog(
+                    collatedMessage)
+                for log in removedClientLogs:
+                    print(f"Removed client logs: {vars(log)}")
         else:
             # add message to message bank and remove from MessageSentLog
             messageBank.addMessage(msg)
