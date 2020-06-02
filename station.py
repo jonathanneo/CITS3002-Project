@@ -8,6 +8,7 @@ import json
 import time as ts
 import urllib
 from datetime import datetime
+import copy
 
 # CONSTANTS
 SERVER = "127.0.0.1"
@@ -384,11 +385,10 @@ def findDestination(station, msg):
     return False, []
 
 
-def sendUdpToParent(station, msg, udpServerSocket, messageSentLogs, routeEndFound):
+def sendUdpToParent(station, msg, udpServerSocket, messageSentLogs, numRouteAdded):
     neighbours = station.neighbours
-    msg["routeEndFound"] = routeEndFound
     msg["messageType"] = "incoming"
-    msg["hopCount"] = msg["hopCount"] - 1
+    msg["hopCount"] = msg["hopCount"] - numRouteAdded
     msg_clean = json.dumps(msg)
     print(f"MESSAGE TO PARENT : {msg_clean}")
 
@@ -545,6 +545,7 @@ def collateMessages(msg, messageBank):
                 earliestMessage = message
                 break
         for message in messageBank.bank:
+            print(f"||| Message in message bank: {message}")
             compareEarliestTime = message["route"][-1]["earliestTrips"][0][4]
             if compareEarliestTime < earliestTime and message["routeEndFound"] == False:
                 earliestTime = compareEarliestTime
@@ -558,9 +559,31 @@ def collateMessages(msg, messageBank):
     return None
 
 
+def removeVisitedFromEarliestTrips(msg):
+    visited = []
+    clonedMsg = copy.deepcopy(msg)
+
+    for trip in clonedMsg["route"][clonedMsg["hopCount"]]["earliestTrips"]:
+        for route in clonedMsg["route"]:
+            if trip[4] == route["stationName"]:
+                visited.append(trip)
+
+    for visit in visited:
+        clonedMsg["route"][clonedMsg["hopCount"]
+                           ]["earliestTrips"].remove(visit)
+
+    return clonedMsg
+
+
 def routeEnd(station, msg):
     visited = []
     routes = msg["route"]
+    rmvedMsgs = removeVisitedFromEarliestTrips(msg)
+
+    # if there's no earliest trip from the station, then no route is found
+    if len(rmvedMsgs["route"][rmvedMsgs["hopCount"]]["earliestTrips"]) == 0:
+        return True
+
     for neighbour in station.neighbours:
         routeEndFound = False
         for route in routes:
@@ -611,13 +634,14 @@ def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSen
                 collatedMessage = collateMessages(msg, messageBank)
                 print("It's for me!")
                 earliestTrips = []
-                for route in collatedMessage["route"]:
-                    route["earliestTrips"][0].insert(0,
-                                                     route["stationName"])
-                    earliestTrips.append(route["earliestTrips"][0])
+                routeEndFound = collatedMessage["routeEndFound"]
+                if not routeEndFound:
+                    for route in collatedMessage["route"]:
+                        route["earliestTrips"][0].insert(0,
+                                                         route["stationName"])
+                        earliestTrips.append(route["earliestTrips"][0])
                 clientLog = clientRequestLogs.getLog(
                     collatedMessage)
-                routeEndFound = collatedMessage["routeEndFound"]
                 print(f"routeEndFound: {routeEndFound}")
                 print(f"client Log: {clientLog}")
                 sendResponseToClient(
@@ -631,37 +655,43 @@ def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSen
             removedLog = messageSentLogs.removeLog(
                 destinationStationAddress, removeTimestamp)
             # if messageSentLog for message is empty, then collate messages from message bank and send back to parent
-            # TODO : change removedLog[""] to removedLog.object
             if messageSentLogs.getLogs(removedLog.parentAddress, removedLog.timestamp) == None:
                 print("That's all folks!")
                 collatedMessage = collateMessages(msg, messageBank)
                 sendUdpToParent(station, collatedMessage,
-                                udpServerSocket, messageSentLogs, False)
+                                udpServerSocket, messageSentLogs, 1)
 
                 print("message sent to parent")
 
     # message is outgoing
     else:
-        # add station to route
-        timestamp = ts.time()
-        msg = addStationToRoute(msg, station, timestamp)
-        # check if destination is found
-        destFound, earliestTrip = findDestination(station, msg)
-        routeEndFound = routeEnd(station, msg)
-        # if station contains route to destination, then send back to source
-        if destFound:
-            msg = removeNonDestination(msg, station)
-            sendUdpToParent(station, msg,
-                            udpServerSocket, messageSentLogs, routeEndFound)
-            print("message sent to parent")
-        # if station does not contain route to destination, then send to neighbours (outgoing)
-        if destFound == False and routeEndFound == False:
-            sendUdp(station, msg,
-                    udpServerSocket, messageSentLogs)
-        if destFound == False and routeEndFound == True:
+        if msg["sourceName"] == station.stationName:
             print("dead end found!")
+            msg["routeEndFound"] = True
             sendUdpToParent(station, msg,
-                            udpServerSocket, messageSentLogs, routeEndFound)
+                            udpServerSocket, messageSentLogs, 0)
+        else:
+            # add station to route
+            timestamp = ts.time()
+            msg = addStationToRoute(msg, station, timestamp)
+            # check if destination is found
+            destFound, earliestTrip = findDestination(station, msg)
+            routeEndFound = routeEnd(station, msg)
+            # if station contains route to destination, then send back to source
+            if destFound:
+                msg = removeNonDestination(msg, station)
+                sendUdpToParent(station, msg,
+                                udpServerSocket, messageSentLogs, 1)
+                print("message sent to parent")
+            # if station does not contain route to destination, then send to neighbours (outgoing)
+            if destFound == False and routeEndFound == False:
+                sendUdp(station, msg,
+                        udpServerSocket, messageSentLogs)
+            if destFound == False and routeEndFound == True:
+                print("dead end found!")
+                msg["routeEndFound"] = True
+                sendUdpToParent(station, msg,
+                                udpServerSocket, messageSentLogs, 1)
 
 
 def serveTcpUdpPort(station, sel, tcpServerSocket, udpServerSocket, messageSentLogs, clientRequestLogs, messageBank):
