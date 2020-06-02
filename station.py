@@ -16,7 +16,7 @@ import uuid
 SERVER = "127.0.0.1"
 FORMAT = "UTF-8"
 TRIP_TYPE = ["FastestTrip"]
-MESSAGE_SIZE = 8192
+MESSAGE_SIZE = 15000
 
 
 class Station:
@@ -648,7 +648,7 @@ def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSen
                 parentAddress, destinationStationAddress, removeMessageId)
             if removedLog == None:
                 raise Exception(
-                    f"@@@@@@@@@@@@@@@@@@@@@@@@@@ Failed to remove messageId: {removeMessageId} || parentAddress: {parentAddress} || destinationStationAddress: {destinationStationAddress} \
+                    f"@@@@@@@@ SOURCE @@@@@@@@@ Failed to remove messageId: {removeMessageId} || parentAddress: {parentAddress} || destinationStationAddress: {destinationStationAddress} \
                         from {' '.join(map(str,messageSentLogs.logs))}")
             print(f"Removal successful.")
 
@@ -685,8 +685,25 @@ def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSen
             removedLog = messageSentLogs.removeLog(
                 parentAddress, destinationStationAddress, removeMessageId)
             if removedLog == None:
+                # if messageSentLogs.getLogs(parentAddress, removeMessageId) == None:
+                #     # send message to parent
+                #     print("Begin sending message back to parent.")
+                #     collatedMessage = collateMessages(msg, messageBank)
+                #     # for index, message in enumerate(messageBank.bank):
+                #     #     print(
+                #     #         f"Station: {station.stationName} || Message Bank Index:{index} || Message: {message} ")
+                #     # print("Calling send udp parent function")
+                #     sendUdpToParent(station, collatedMessage,
+                #                     udpServerSocket, 1)
+                #     print(
+                #         f"station: {station.stationName} || Message sent to parent successfully. now awaiting the following other messages:")
+                #     for index, log in enumerate(messageSentLogs.logs):
+                #         print(
+                #             f"station: {station.stationName} || index: {index} || log: {vars(log)}")
+                #     print("\n")
+
                 raise Exception(
-                    f"@@@@@@@@@@@@@@@@@@@@@@@@@@ Failed to remove messageId: {removeMessageId} || parentAddress: {parentAddress} || destinationStationAddress: {destinationStationAddress} \
+                    f"@@@@@@@ STATION @@@@@@@ Failed to remove messageId: {removeMessageId} || parentAddress: {parentAddress} || destinationStationAddress: {destinationStationAddress} \
                         from {' '.join(map(str,messageSentLogs.logs))}")
             print(f"Removal successful.")
             # print(
