@@ -1,20 +1,10 @@
-python3 station.py BusportA 4001 4002 4004 4016 4022 4024 &
-python3 station.py StationB 4003 4004 4002 4016 4022 4032 &
-python3 station.py TerminalC 4005 4006 4010 4014 4024 4032 4040 &
-python3 station.py JunctionD 4007 4008 4014 4016 4018 4020 4024 4028 4036 4040 &
-python3 station.py BusportE 4009 4010 4006 4026 4028 4030 4032 4038 &
-python3 station.py StationF 4011 4012 4016 4020 4026 4038 4040 &
-python3 station.py TerminalG 4013 4014 4006 4008 4018 4026 4028 4030 4036 &
-python3 station.py JunctionH 4015 4016 4002 4004 4008 4012 4018 4024 4026 4030 &
-python3 station.py BusportI 4017 4018 4008 4014 4016 4020 4024 4026 4028 4038 &
-python3 station.py StationJ 4019 4020 4008 4012 4018 4032 &
-python3 station.py TerminalK 4021 4022 4002 4004 &
-python3 station.py JunctionL 4023 4024 4002 4006 4008 4016 4018 4036 &
-python3 station.py BusportM 4025 4026 4010 4012 4014 4016 4018 4038 4040 &
-python3 station.py StationN 4027 4028 4008 4010 4014 4018 4038 4040 &
-python3 station.py TerminalO 4029 4030 4010 4014 4016 4032 4038 &
-python3 station.py JunctionP 4031 4032 4004 4006 4010 4020 4030 4040 &
-python3 station.py BusportQ 4033 4034 4038 &
-python3 station.py StationR 4035 4036 4008 4014 4024 &
-python3 station.py TerminalS 4037 4038 4010 4012 4018 4026 4028 4030 4034 &
-python3 station.py JunctionT 4039 4040 4006 4008 4012 4026 4028 4032 &
+python3 station.py BusportA 4001 4002 4004 4014 4016 4018 4020 &
+python3 station.py StationB 4003 4004 4002 4012 &
+python3 station.py TerminalC 4005 4006 4008 &
+python3 station.py JunctionD 4007 4008 4006 4016 &
+python3 station.py BusportE 4009 4010 4012 4014 &
+python3 station.py StationF 4011 4012 4004 4010 4014 4016 4018 4020 &
+python3 station.py TerminalG 4013 4014 4002 4010 4012 4016 4018 &
+python3 station.py JunctionH 4015 4016 4002 4008 4012 4014 &
+python3 station.py BusportI 4017 4018 4002 4012 4014 &
+python3 station.py StationJ 4019 4020 4002 4012

@@ -3,3 +3,5 @@ datafiles*/
 *.Test*
 *.exe
 tt-*
+adjacency
+startstations.sh
