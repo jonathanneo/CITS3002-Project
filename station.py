@@ -934,6 +934,8 @@ def main(argv):
     serveTcpUdpPort(station, sel, tcpServerSocket,
                     udpServerSocket, messageSentLogs, clientRequestLogs, messageBank, path, osstat)
     # TODO: commenting, separating python files, throwing errors
+    # TODO: update readme -- use diagram
+    # TODO: Use ?to
 
     return None
 
