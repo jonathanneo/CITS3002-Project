@@ -534,26 +534,22 @@ def addStationToRoute(message, station, messageId):
 
 
 def collateMessages(msg, messageBank):
+    """
+    Obtain the earliest trip if there is a valid route. Remove messages from the messageBank with the matching messageId. 
+    Else return the original message but set routeEndFound = True (in case). 
+    """
+    earliestMessage = None
     tripType = msg["tripType"]
     hopCount = msg["hopCount"]
-    numCompleteRoute = 0
-    # if there is no completed route, then do not attempt to collate, and instead return None so that we can send routeNotFound == True to parent.
-    for message in messageBank.bank:
-        try:
-            if message["routeEndFound"] == False and message["route"][hopCount]["messageId"] == msg["route"][hopCount]["messageId"]:
-                numCompleteRoute = numCompleteRoute + 1
-        except:
-            pass  # the message is some other message that doesn't have the same hopCount
+    messageId = msg["route"][hopCount]["messageId"]
+    destinationName = msg["destinationName"]
 
-    if numCompleteRoute == 0:
-        return msg
-
-    if tripType == "FastestTrip" and numCompleteRoute > 0:
+    if tripType == "FastestTrip":
         # just grab one record to set as the initial earliest time
         for message in messageBank.bank:
             try:
-                if message["routeEndFound"] == False and message["route"][hopCount]["messageId"] == msg["route"][hopCount]["messageId"]:
-                    # grab last route
+                if message["routeEndFound"] == False and message["route"][hopCount]["messageId"] == messageId:
+                    # grab matching route
                     earliestTime = message["route"][-1]["earliestTrips"][0][4]
                     earliestMessage = message
                     break
@@ -562,22 +558,29 @@ def collateMessages(msg, messageBank):
         # always grab the latest one (to destination) if looking for fastests trip
         for message in messageBank.bank:
             try:
-                if len(message["route"][-1]["earliestTrips"]) > 0 and message["route"][hopCount]["messageId"] == msg["route"][hopCount]["messageId"]:
+                if message["routeEndFound"] == False and \
+                    len(message["route"][-1]["earliestTrips"]) > 0 and \
+                        message["route"][hopCount]["messageId"] == messageId:
                     # grab last route
                     compareEarliestTime = message["route"][-1]["earliestTrips"][0][4]
-                    if compareEarliestTime < earliestTime and message["routeEndFound"] == False:
+                    if compareEarliestTime < earliestTime:
                         earliestTime = compareEarliestTime
                         earliestMessage = message
             except:
                 pass  # the message is some other message that doesn't have the same hopCount
 
         print(
-            f'Removing message id from messageBank: {msg["route"][hopCount]["messageId"]}')
-        messageBank.removeMessage(hopCount,
-                                  earliestMessage["route"][hopCount]["messageId"])
-        return earliestMessage
+            f'Removing message id from messageBank: {messageId}')
+        # Remove all messages from the messageBank with the matching message id
+        messageBank.removeMessage(hopCount, messageId)
 
-    return None
+        # if earliestMessage contains an object, then return the earliestMessage. Else return the original message but set routeEndFound = True.
+        if earliestMessage != None:
+            return earliestMessage
+        else:
+            msg["routeEndFound"] = True
+            msg["messageType"] = "incoming"
+            return msg
 
 
 def removeVisitedFromEarliestTrips(msg):
@@ -637,6 +640,24 @@ def findRoutePosition(route, stationName):
             return index
 
 
+def matchRoute(msg):
+    numRoutes = len(msg["route"])
+    for index in range(numRoutes):
+        earliestTrips = msg["route"][index]["earliestTrips"]
+        removeTrip = []
+        if index + 1 < numRoutes:
+            for trip in earliestTrips:
+                if trip[4] != msg["route"][index+1]["stationName"]:
+                    removeTrip.append(trip)
+        else:
+            for trip in earliestTrips:
+                if trip[4] != msg["destinationName"]:
+                    removeTrip.append(trip)
+        for trip in removeTrip:
+            msg["route"][index]["earliestTrips"].remove(trip)
+    return msg
+
+
 def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSentLogs, clientRequestLogs, messageBank, MessageID):
     bytesAddressPair = udpServerSocket.recvfrom(
         station.MessageSize)
@@ -680,8 +701,8 @@ def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSen
             if messageSentLogs.getLogs(removedLog.messageId) == None:
                 # return webpage with trip details
                 collatedMessage = collateMessages(msg, messageBank)
-
-                print("It's for me!")
+                collatedMessage = matchRoute(collatedMessage)
+                print(f"Collated Message is: {collatedMessage}")
                 earliestTrips = []
                 routeEndFound = collatedMessage["routeEndFound"]
                 if not routeEndFound:
@@ -727,6 +748,7 @@ def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSen
                 # print("That's all folks!")
                 print("Begin sending message back to parent.")
                 collatedMessage = collateMessages(msg, messageBank)
+                collatedMessage = matchRoute(collatedMessage)
                 # for index, message in enumerate(messageBank.bank):
                 #     print(
                 #         f"Station: {station.stationName} || Message Bank Index:{index} || Message: {message} ")
