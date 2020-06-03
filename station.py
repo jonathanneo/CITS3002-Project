@@ -933,10 +933,6 @@ def main(argv):
     # Serve TCP and UDP ports
     serveTcpUdpPort(station, sel, tcpServerSocket,
                     udpServerSocket, messageSentLogs, clientRequestLogs, messageBank, path, osstat)
-
-    # TODO: Ability to find a valid (but not necessarily optimal) route between origin and destination stations,
-    # for varying sized transport-networks of 2, 3, 5, 10, and 20 stations (including transport-networks involving cycles),
-    # with no station attempting to collate information about the whole transport-network; ability to support multiple, concurrent queries from different clients.
     # TODO: commenting, separating python files, throwing errors
 
     return None
