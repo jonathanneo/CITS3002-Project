@@ -537,9 +537,13 @@ def collateMessages(msg, messageBank):
     tripType = msg["tripType"]
     hopCount = msg["hopCount"]
     numCompleteRoute = 0
+    # if there is no completed route, then do not attempt to collate, and instead return None so that we can send routeNotFound == True to parent.
     for message in messageBank.bank:
-        if message["routeEndFound"] == False and message["messageId"] == msg["messageId"]:
-            numCompleteRoute = numCompleteRoute + 1
+        try:
+            if message["routeEndFound"] == False and message["route"][hopCount]["messageId"] == msg["route"][hopCount]["messageId"]:
+                numCompleteRoute = numCompleteRoute + 1
+        except:
+            pass  # the message is some other message that doesn't have the same hopCount
 
     if numCompleteRoute == 0:
         return msg
@@ -567,6 +571,8 @@ def collateMessages(msg, messageBank):
             except:
                 pass  # the message is some other message that doesn't have the same hopCount
 
+        print(
+            f'Removing message id from messageBank: {msg["route"][hopCount]["messageId"]}')
         messageBank.removeMessage(hopCount,
                                   earliestMessage["route"][hopCount]["messageId"])
         return earliestMessage
