@@ -225,7 +225,7 @@ html_content = """
                         </div>
                         <br>
                         <div>
-                            <input type="submit" value="Get travel plan" class="btn btn-primary">
+                            <input type="submit" value="Get trip details" class="btn btn-primary">
                         </div>
                     </form>
                 </div>
@@ -473,7 +473,7 @@ def getSummarisedTrip(msg):
     destinationName = msg["destinationName"]
     sourceTrip = msg["route"][0]["earliestTrips"][0]
     destinationTrip = msg["route"][-1]["earliestTrips"][0]
-    summarisedTrip = f"Depart from {sourceName} ({sourceTrip[3]}) at {sourceTrip[1]} taking {sourceTrip[2]} and arrive at {destinationName} at {destinationTrip[4]}."
+    summarisedTrip = f"Depart from {sourceName} ({sourceTrip[3]}) at {sourceTrip[1]} taking {sourceTrip[2]} and eventually arrive at {destinationName} at {destinationTrip[4]}. View trip details below."
     print(f"summarised trip: {summarisedTrip}")
     return summarisedTrip
 
