@@ -1,10 +1,20 @@
-BusportA StationB TerminalG JunctionH BusportI StationJ
-StationB BusportA StationF
-TerminalC JunctionD
-JunctionD TerminalC JunctionH
-BusportE StationF TerminalG
-StationF StationB BusportE TerminalG JunctionH BusportI StationJ
-TerminalG BusportA BusportE StationF JunctionH BusportI
-JunctionH BusportA JunctionD StationF TerminalG
-BusportI BusportA StationF TerminalG
-StationJ BusportA StationF
+TerminalA BusportO
+JunctionB TerminalE StationH StationP
+BusportC StationD JunctionF StationH TerminalI BusportS
+StationD BusportC TerminalI JunctionJ TerminalM BusportS
+TerminalE JunctionB BusportG BusportO JunctionR BusportS StationT
+JunctionF BusportC StationT
+BusportG TerminalE TerminalI BusportK JunctionR
+StationH JunctionB BusportC StationL TerminalM StationP
+TerminalI BusportC StationD BusportG
+JunctionJ StationD JunctionN
+BusportK BusportG
+StationL StationH StationP TerminalQ
+TerminalM StationD StationH TerminalQ BusportS StationT
+JunctionN JunctionJ
+BusportO TerminalA TerminalE
+StationP JunctionB StationH StationL StationT
+TerminalQ StationL TerminalM
+JunctionR TerminalE BusportG BusportS StationT
+BusportS BusportC StationD TerminalE TerminalM JunctionR
+StationT TerminalE JunctionF TerminalM StationP JunctionR

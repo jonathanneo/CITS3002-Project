@@ -16,7 +16,7 @@ import uuid
 SERVER = "127.0.0.1"
 FORMAT = "UTF-8"
 TRIP_TYPE = ["FastestTrip"]
-MESSAGE_SIZE = 15000
+MESSAGE_SIZE = 50000
 
 
 class Station:
@@ -430,12 +430,7 @@ def sendResponseToClient(station, data, earliestTrip, sock, sel, stationResponse
     return False
 
 
-def incrementMessageId(MessageID):
-    MessageID = MessageID + 1
-    return MessageID
-
-
-def serviceTcpConnection(key, mask, sel, station, udpServerSocket, messageSentLogs, clientRequestLogs, MessageID):
+def serviceTcpConnection(key, mask, sel, station, udpServerSocket, messageSentLogs, clientRequestLogs):
     request = False
     method = "GET"
     sock = key.fileobj
@@ -658,7 +653,7 @@ def matchRoute(msg):
     return msg
 
 
-def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSentLogs, clientRequestLogs, messageBank, MessageID):
+def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSentLogs, clientRequestLogs, messageBank):
     bytesAddressPair = udpServerSocket.recvfrom(
         station.MessageSize)
     message = bytesAddressPair[0].decode()
@@ -670,9 +665,6 @@ def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSen
     print(f"\n\nMessage received from {address}")
     print(f"Message from {address}: {message}")
     # message is incoming
-    if type(msg) == int:
-        raise Exception(
-            f"Message from: {destinationIP} \n || \n || Message: {message} ")
     if msg["messageType"] == "incoming":
         print(f"Message type: incoming")
         # print(f"message received:{message}")
@@ -683,8 +675,6 @@ def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSen
             # add message to message bank and remove from MessageSentLog
             print("message received!. i am the source.")
             messageBank.addMessage(msg)
-            print(
-                f"message has been added to {station.stationName} message bank")
             destinationStationAddress = f"http://{address[0]}:{address[1]}"
             removeMessageId = msg["route"][msg["hopCount"]]["messageId"]
             parentAddress = ""  # no parent address as this is the source
@@ -851,7 +841,7 @@ def checkAndUpdateTimetable(station, path, osstat):
     return osstat
 
 
-def serveTcpUdpPort(station, sel, tcpServerSocket, udpServerSocket, messageSentLogs, clientRequestLogs, messageBank, path, osstat, MessageID):
+def serveTcpUdpPort(station, sel, tcpServerSocket, udpServerSocket, messageSentLogs, clientRequestLogs, messageBank, path, osstat):
     # wait for connection
     try:
         while True:
@@ -871,14 +861,14 @@ def serveTcpUdpPort(station, sel, tcpServerSocket, udpServerSocket, messageSentL
                     # if the listening socket is UDP
                     if key.fileobj.getsockname() == station.udp_address:
                         serviceUdpCommunication(
-                            key, mask, sel, station, udpServerSocket, messageSentLogs, clientRequestLogs, messageBank, MessageID)
+                            key, mask, sel, station, udpServerSocket, messageSentLogs, clientRequestLogs, messageBank)
 
                 # a client socket that has been accepted and now we need to service it i.e. has data
                 else:
                     try:
                         if key.fileobj.getsockname() == station.tcp_address:
                             serviceTcpConnection(
-                                key, mask, sel, station, udpServerSocket, messageSentLogs, clientRequestLogs, MessageID)
+                                key, mask, sel, station, udpServerSocket, messageSentLogs, clientRequestLogs)
                     except:
                         print("TCP Connetion is closed.")
                         pass
@@ -940,15 +930,13 @@ def main(argv):
     messageSentLogs = MessageSentLogs()
     clientRequestLogs = ClientRequestLogs()
     messageBank = MessageBank()
-    MessageID = 0
     # Serve TCP and UDP ports
     serveTcpUdpPort(station, sel, tcpServerSocket,
-                    udpServerSocket, messageSentLogs, clientRequestLogs, messageBank, path, osstat, MessageID)
+                    udpServerSocket, messageSentLogs, clientRequestLogs, messageBank, path, osstat)
 
     # TODO: Ability to find a valid (but not necessarily optimal) route between origin and destination stations,
     # for varying sized transport-networks of 2, 3, 5, 10, and 20 stations (including transport-networks involving cycles),
     # with no station attempting to collate information about the whole transport-network; ability to support multiple, concurrent queries from different clients.
-    # TODO: Fix try error
     # TODO: commenting, separating python files, throwing errors
 
     return None
