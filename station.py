@@ -199,31 +199,43 @@ html_content = """
     </head>
     <body>
         <div class="container">
-            <h1>Welcome to {station}</h1><br>
-            Hello {address} <br>
-            <form action="{stationTcpAddress}" method="GET">
-                <div>
-                    <label for="station">What station would you like to go to?</label>
-                    <input name="station" id="station" class="form-control">
+            {summarisedTrip}
+            <br>
+            <div class="card">
+                <div class="card-header">
+                    Plan your next trip
                 </div>
-                <div>
-                    <label for="time">When do you want to leave?</label>
-                    <select name="time" id="timetable" class="form-control"></select>
+                <div class="card-body">
+                    <form action="{stationTcpAddress}" method="GET" >
+                        <div>
+                            <label for="source">Source:</label>
+                            <b><p name="source" id="source">{station}</p></b>
+                        </div>
+                        <div>
+                            <label for="to">Destination:</label>
+                            <input name="to" id="to" class="form-control">
+                        </div>
+                        <div>
+                            <label for="time">Departure Time:</label>
+                            <select name="time" id="timetable" class="form-control"></select>
+                        </div>
+                        <div>
+                            <label for="tripType">Type of Trip:</label>
+                            <select name="tripType" id="tripType" class="form-control"></select>
+                        </div>
+                        <br>
+                        <div>
+                            <input type="submit" value="Get travel plan" class="btn btn-primary">
+                        </div>
+                    </form>
                 </div>
-                <div>
-                    <label for="tripType">What type of trip?</label>
-                    <select name="tripType" id="tripType" class="form-control"></select>
-                </div>
-                <br>
-                <div>
-                    <input type="submit" value="Get travel plan" class="btn btn-primary">
-                </div>
-            </form>
-
+            </div>
+            
             <div id="response">
                 <br>
                 <hr>
                 <h4>Trip Details</h4>
+                <br>
                 <div class="card">
                     <ul id="response-list" class="list-group list-group-flush">
                     </ul>
@@ -238,10 +250,8 @@ html_content = """
     const timetable = {timetable};
     const tripTypes = {tripTypes};
     const stationResponse = {stationResponse};
-    console.log(stationResponse);
     const responses = {responses};
     const routeEndFound = {routeEndFound};
-    console.log(routeEndFound);
 
     const respond = (response, $response, $responseList, routeEndFound) => {{
         $response.show();
@@ -315,6 +325,24 @@ def getRequestObject(request_body):
     return request_body_objects
 
 
+def matchRoute(msg):
+    numRoutes = len(msg["route"])
+    for index in range(numRoutes):
+        earliestTrips = msg["route"][index]["earliestTrips"]
+        removeTrip = []
+        if index + 1 < numRoutes:
+            for trip in earliestTrips:
+                if trip[4] != msg["route"][index+1]["stationName"]:
+                    removeTrip.append(trip)
+        else:
+            for trip in earliestTrips:
+                if trip[4] != msg["destinationName"]:
+                    removeTrip.append(trip)
+        for trip in removeTrip:
+            msg["route"][index]["earliestTrips"].remove(trip)
+    return msg
+
+
 def sendUdp(station, msg, udpServerSocket, messageSentLogs):
     neighbours = station.neighbours
     msg_clean = json.dumps(msg)
@@ -357,18 +385,26 @@ def sendUdp(station, msg, udpServerSocket, messageSentLogs):
 
 
 def getMessageToSend(requestObject, station, messageId):
+    print(f"Request Object: {requestObject}")
     destination = ""
     time = ""
     tripType = ""
     messageType = "outgoing"  # either outgoing or incoming
     for item in requestObject:
-        if item.get("station") != None:
-            destination = item.get("station")
+        if item.get("to") != None:
+            destination = item.get("to")
         if item.get("time") != None:
             time = str(item.get("time"))
             time = urllib.parse.unquote(time)
         if item.get("tripType") != None:
             tripType = item.get("tripType")
+    if time == "":
+        timeObject = datetime.now().time()
+        hour = timeObject.hour
+        minute = timeObject.minute
+        time = f"{hour}:{minute}"
+    if tripType == "":
+        tripType = "FastestTrip"
     message = Message(station.stationName,
                       destination,
                       tripType,
@@ -408,7 +444,7 @@ def sendUdpToParent(station, msg, udpServerSocket, hopCountDeduct):
     print(f"Incoming Message sent to parent: {addressTuple}")
 
 
-def sendResponseToClient(station, data, earliestTrip, sock, sel, stationResponse, routeEndFound):
+def sendResponseToClient(station, data, earliestTrip, sock, sel, stationResponse, routeEndFound, summarisedTrip):
     if routeEndFound == True:
         routeEndFound = "true"
     else:
@@ -423,11 +459,23 @@ def sendResponseToClient(station, data, earliestTrip, sock, sel, stationResponse
                                     tripTypes=TRIP_TYPE,
                                     stationResponse=stationResponse,
                                     responses=earliestTrip,
-                                    routeEndFound=routeEndFound)
+                                    routeEndFound=routeEndFound,
+                                    summarisedTrip=summarisedTrip)
     sock.send(sendData.encode())
     sel.unregister(sock)
     sock.close()
     return False
+
+
+def getSummarisedTrip(msg):
+    print(f"Message: {msg}")
+    sourceName = msg["sourceName"]
+    destinationName = msg["destinationName"]
+    sourceTrip = msg["route"][0]["earliestTrips"][0]
+    destinationTrip = msg["route"][-1]["earliestTrips"][0]
+    summarisedTrip = f"Depart from {sourceName} ({sourceTrip[3]}) at {sourceTrip[1]} taking {sourceTrip[2]} and arrive at {destinationName} at {destinationTrip[4]}."
+    print(f"summarised trip: {summarisedTrip}")
+    return summarisedTrip
 
 
 def serviceTcpConnection(key, mask, sel, station, udpServerSocket, messageSentLogs, clientRequestLogs):
@@ -443,7 +491,7 @@ def serviceTcpConnection(key, mask, sel, station, udpServerSocket, messageSentLo
             request = True
             method = recv_data.split()[0]
             requestBody = getRequestBody(recv_data.split("\r\n"))
-            if "station" in requestBody:
+            if "to" in requestBody:
                 # Request has been received!
                 requestObject = getRequestObject(requestBody)
                 # Create message
@@ -458,9 +506,11 @@ def serviceTcpConnection(key, mask, sel, station, udpServerSocket, messageSentLo
                 destFound, earliestTrip = findDestination(station, msg)
                 if destFound:
                     # if destination is found, then send message back to client
+                    msg = matchRoute(msg)
                     earliestTrip.insert(0, station.stationName)
+                    summarisedTrip = getSummarisedTrip(msg)
                     request = sendResponseToClient(
-                        station, data, [earliestTrip], sock, sel, "true", False)
+                        station, data, [earliestTrip], sock, sel, "true", False, summarisedTrip)
                     clientRequestLogs.removeLog(msg)
                 if not destFound:
                     # if destination is not found, then pass message forward to other nodes
@@ -482,7 +532,7 @@ def serviceTcpConnection(key, mask, sel, station, udpServerSocket, messageSentLo
                     send = False
             if send:
                 request = sendResponseToClient(
-                    station, data, [[]], sock, sel, "false", False)
+                    station, data, [[]], sock, sel, "false", False, "")
 
 
 def startTcpPort(station, sel):
@@ -635,24 +685,6 @@ def findRoutePosition(route, stationName):
             return index
 
 
-def matchRoute(msg):
-    numRoutes = len(msg["route"])
-    for index in range(numRoutes):
-        earliestTrips = msg["route"][index]["earliestTrips"]
-        removeTrip = []
-        if index + 1 < numRoutes:
-            for trip in earliestTrips:
-                if trip[4] != msg["route"][index+1]["stationName"]:
-                    removeTrip.append(trip)
-        else:
-            for trip in earliestTrips:
-                if trip[4] != msg["destinationName"]:
-                    removeTrip.append(trip)
-        for trip in removeTrip:
-            msg["route"][index]["earliestTrips"].remove(trip)
-    return msg
-
-
 def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSentLogs, clientRequestLogs, messageBank):
     bytesAddressPair = udpServerSocket.recvfrom(
         station.MessageSize)
@@ -708,8 +740,9 @@ def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSen
                         earliestTrips.append(route["earliestTrips"][0])
                 clientLog = clientRequestLogs.getLog(
                     collatedMessage)
+                summarisedTrip = getSummarisedTrip(collatedMessage)
                 sendResponseToClient(
-                    station, clientLog.data, earliestTrips, clientLog.sock, clientLog.sel, "true", routeEndFound)
+                    station, clientLog.data, earliestTrips, clientLog.sock, clientLog.sel, "true", routeEndFound, summarisedTrip)
                 removedClientLogs = clientRequestLogs.removeLog(
                     collatedMessage)
         else:
@@ -935,7 +968,6 @@ def main(argv):
                     udpServerSocket, messageSentLogs, clientRequestLogs, messageBank, path, osstat)
     # TODO: commenting, separating python files, throwing errors
     # TODO: update readme -- use diagram
-    # TODO: Use ?to
 
     return None
 
