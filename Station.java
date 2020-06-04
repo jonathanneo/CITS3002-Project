@@ -354,7 +354,29 @@ public class Station {
     public static JSONObject matchRoute(JSONObject msg) {
         JSONArray routes = (JSONArray) msg.get("route");
         int numRoutes = routes.size();
-        return new JSONObject();
+        for (int index = 0; index < numRoutes; index++) {
+            JSONObject route = (JSONObject) routes.get(index);
+            List<List<String>> earliestTrips = (List<List<String>>) route.get("earliestTrips");
+            List<List<String>> removeTrip = new ArrayList<List<String>>();
+            if (index + 1 < numRoutes) {
+                for (List<String> trip : earliestTrips) {
+                    JSONObject nextRoute = (JSONObject) routes.get(index + 1);
+                    if (trip.get(4) != nextRoute.get("stationName")) {
+                        removeTrip.add(trip);
+                    }
+                }
+            } else {
+                for (List<String> trip : earliestTrips) {
+                    if (trip.get(4) != msg.get("destinationName")) {
+                        removeTrip.add(trip);
+                    }
+                }
+            }
+            for (List<String> trip : removeTrip) {
+                earliestTrips.remove(trip);
+            }
+        }
+        return msg;
     }
 
     /**
