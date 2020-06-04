@@ -25,6 +25,7 @@ import java.util.Date;
 import java.nio.file.*;
 import java.sql.JDBCType;
 import java.nio.charset.StandardCharsets;
+import java.net.URLDecoder;
 
 /**
  * @author Jonathan Neo
@@ -91,8 +92,8 @@ public class Station {
         List<List<String>> earliestTrips = new ArrayList<List<String>>();
         try {
             for (List<String> timetableRecord : this.timetable) {
-                Date timeValue = new SimpleDateFormat("hh:mm").parse(time);
-                Date timetableRecordTime = new SimpleDateFormat("hh:mm").parse(timetableRecord.get(0));
+                Date timeValue = new SimpleDateFormat("HH:mm").parse(time);
+                Date timetableRecordTime = new SimpleDateFormat("HH:mm").parse(timetableRecord.get(0));
                 String timetableRecordDestination = timetableRecord.get(4);
                 // first trip
                 if (earliestTrips.size() == 0) {
@@ -351,6 +352,12 @@ public class Station {
         return requestBodyObjects;
     }
 
+    /**
+     * Keep only earliest trips that aren't duplicates
+     * 
+     * @param msg
+     * @return msg containing earliest trips that aren't duplicates
+     */
     public static JSONObject matchRoute(JSONObject msg) {
         JSONArray routes = (JSONArray) msg.get("route");
         int numRoutes = routes.size();
@@ -377,6 +384,40 @@ public class Station {
             }
         }
         return msg;
+    }
+
+    public static Message getMessageToSend(List<JSONObject> requestObject, Station station, String messageId) {
+        String destination = "";
+        String time = "";
+        String tripType = "";
+        String messageType = "outgoing";
+        for (JSONObject item : requestObject) {
+            if (item.get("to") != null) {
+                destination = (String) item.get("to");
+            }
+            if (item.get("time") != null) {
+                time = (String) item.get("time");
+                // decode time
+                try {
+                    time = java.net.URLDecoder.decode(time, StandardCharsets.UTF_8.name());
+                } catch (UnsupportedEncodingException e) {
+                    // not going to happen - value came from JDK's own StandardCharsets
+                }
+            }
+            if (item.get("tripType") != null) {
+                tripType = (String) item.get("tripType");
+            }
+        }
+        if (time == "") {
+            Date date = new Date();
+            SimpleDateFormat formatter = new SimpleDateFormat("HH:mm");
+            time = formatter.format(date);
+        }
+        if (tripType == "") {
+            tripType = "FastestTrip";
+        }
+        Message message = Message(station.stationName, destination, tripType, time, messageId, messageType);
+        // message =
     }
 
     /**
