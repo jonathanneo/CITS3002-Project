@@ -270,9 +270,10 @@ public class Station {
          * Gets the stationJsonObject based on the station object and adds to route
          * 
          * @param station
+         * @exception time cannot be casted to date
          */
-        public void addRoute(Station station) {
-            stationObject = station.getStationObject(this.messageId, this.time);
+        public void addRoute(Station station) throws Exception {
+            JSONObject stationObject = station.getStationObject(this.messageId, this.time);
             this.route.add(stationObject);
         }
     }
@@ -297,7 +298,10 @@ public class Station {
             List<JSONObject> removedMessages = new ArrayList<JSONObject>();
             for (JSONObject message : this.bank) {
                 try {
-                    if ((String) message.get("route").get(hopCount).get("messageId") == messageId) {
+                    JSONArray route = (JSONArray) message.get("route");
+                    JSONObject bankStation = (JSONObject) route.get(hopCount);
+                    String bankMessageId = (String) bankStation.get("messageId");
+                    if (bankMessageId == messageId) {
                         removedMessages.add(message);
                     }
                 } catch (Exception e) {
