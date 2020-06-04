@@ -195,8 +195,15 @@ public class Station {
                     // store contents from buffer into a string
                     String result = new String(buffer.array()).trim();
                     System.out.println("Message received: " + result);
-                    // perform logic here
-
+                    String message = "HTTP/1.1 200 OK\r\n\r\n Hello there!";
+                    System.out.println("Message length: " + message.length());
+                    ByteBuffer responseBuffer = ByteBuffer.allocate(message.length());
+                    responseBuffer.clear();
+                    responseBuffer.put(message.getBytes());
+                    responseBuffer.flip();
+                    while (responseBuffer.hasRemaining()) {
+                        socketChannel.write(responseBuffer);
+                    }
                     socketChannel.close();
 
                 }
