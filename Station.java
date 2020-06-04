@@ -229,6 +229,10 @@ public class Station {
         }
     }
 
+    /**
+     * Class used to store the message that will be communicated between stations
+     * via UDP
+     */
     public class Message {
         String sourceName;
         String destinationName;
@@ -262,11 +266,50 @@ public class Station {
             this.routeEndFound = false; // no dead end found
         }
 
+        /**
+         * Gets the stationJsonObject based on the station object and adds to route
+         * 
+         * @param station
+         */
         public void addRoute(Station station) {
             stationObject = station.getStationObject(this.messageId, this.time);
             this.route.add(stationObject);
         }
+    }
 
+    /**
+     * Used to store JSON messages received from neighbouring stations and store
+     * here until can be collated and sent to parent
+     */
+    public class MessageBank {
+        List<JSONObject> bank = new ArrayList<JSONObject>();
+
+        /**
+         * Add message to message bank
+         * 
+         * @param message
+         */
+        public void addMessage(JSONObject message) {
+            this.bank.add(message);
+        }
+
+        public List<JSONObject> removeMessage(int hopCount, String messageId) {
+            List<JSONObject> removedMessages = new ArrayList<JSONObject>();
+            for (JSONObject message : this.bank) {
+                try {
+                    if ((String) message.get("route").get(hopCount).get("messageId") == messageId) {
+                        removedMessages.add(message);
+                    }
+                } catch (Exception e) {
+                    // do nothing. the message is some other message that doesn't have the same
+                    // hopCount
+                }
+            }
+            for (JSONObject removedMessage : removedMessages) {
+                this.bank.remove(removedMessage);
+            }
+            return removedMessages;
+        }
     }
 
     /**
