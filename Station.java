@@ -83,9 +83,6 @@ public class Station {
         System.out.println("StationName: " + stationName);
         System.out.println("TcpPort: " + tcpPort);
         System.out.println("UdpPort: " + udpPort);
-        for (int i = 0; i < neighbourPorts.size(); i++) {
-            System.out.println("Neighbour Ports: " + neighbourPorts.get(i));
-        }
         Station station = new Station(stationName, tcpPort, udpPort);
 
         return Arrays.asList(station, neighbourPorts);
@@ -101,9 +98,16 @@ public class Station {
             }
             br.close();
         } catch (Exception e) {
-            throw new Exception("Failed to get timetable. Full error: " + e);
+            throw new Exception("Failed to get timetable. Full error:\n" + e);
         }
         return records;
+    }
+
+    public static void addNeighbour(List<String> neighbourPorts, Station station) {
+        for (String neighbourPort : neighbourPorts) {
+            Station neighbour = new Station("", "", neighbourPort);
+            station.addNeighbour(neighbour);
+        }
     }
 
     public static void main(String[] args) throws Exception {
@@ -117,7 +121,10 @@ public class Station {
         Station station = (Station) argResult.get(0);
         List<String> neighbourPorts = (List<String>) argResult.get(1);
         // add neighbours
-
+        addNeighbour(neighbourPorts, station);
+        for (Station neighbour : station.neighbours) {
+            System.out.println("Neighbour port: " + neighbour.udpPort);
+        }
         // get file path
         String path = System.getProperty("user.dir") + "/tt-" + station.stationName;
         System.out.println("Path: " + path);
