@@ -16,7 +16,7 @@ import uuid
 SERVER = "127.0.0.1"
 FORMAT = "UTF-8"
 TRIP_TYPE = ["FastestTrip"]
-MESSAGE_SIZE = 50000
+MESSAGE_SIZE = 10000
 
 
 class Station:
