@@ -16,6 +16,12 @@ import java.net.Socket;
 import java.util.Iterator;
 import java.util.Set;
 import java.util.HashMap;
+import org.json.simple.JSONObject;
+import org.json.simple.JSONArray;
+import org.json.simple.parser.ParseException;
+import org.json.simple.parser.JSONParser;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 
 /**
  * @author Jonathan Neo
@@ -78,9 +84,35 @@ public class Station {
         return "http://" + this.server + ":" + Integer.toString(this.tcpPort);
     }
 
-    public List<List<String>> getEarliestTrips(String time) {
-        // TODO
-        return null;
+    public List<List<String>> getEarliestTrips(String time) throws Exception {
+        List<List<String>> earliestTrips = new ArrayList<List<String>>();
+        try {
+            for (List<String> timetableRecord : this.timetable) {
+                Date timeValue = new SimpleDateFormat("hh:mm").parse(time);
+                Date timetableRecordTime = new SimpleDateFormat("hh:mm").parse(timetableRecord.get(0));
+                String timetableRecordDestination = timetableRecord.get(4);
+                // first trip
+                if (earliestTrips.size() == 0) {
+                    if (timetableRecordTime.compareTo(timeValue) >= 0) {
+                        earliestTrips.add(timetableRecord);
+                    }
+                } else {
+                    Boolean recordFound = false;
+                    for (List<String> trips : earliestTrips) {
+                        if (timetableRecordTime.compareTo(timeValue) >= 0
+                                && trips.get(4) == timetableRecordDestination) {
+                            recordFound = true;
+                        }
+                    }
+                    if (recordFound == false) {
+                        earliestTrips.add(timetableRecord);
+                    }
+                }
+            }
+            return earliestTrips;
+        } catch (Exception e) {
+            throw new Exception("Could not parse time correctly. Full error message: " + e);
+        }
     }
 
     public Object getStationObject(String mesageId, String time) {
