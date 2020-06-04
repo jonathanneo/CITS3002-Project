@@ -131,6 +131,10 @@ public class Station {
         }
     }
 
+    public static void listenTcpServer() {
+
+    }
+
     public static void main(String[] args) throws Exception {
         // check arguments
         checkArguments(args);
@@ -158,43 +162,46 @@ public class Station {
         Selector selector = Selector.open();
         // tcp: create server socket channel
         ServerSocketChannel serverSocketChannel = ServerSocketChannel.open();
-        InetSocketAddress serverAddress = new InetSocketAddress(station.server, station.tcpPort);
-        // station.tcpPort
+        InetSocketAddress tcpServerAddress = new InetSocketAddress(station.server, station.tcpPort);
         // bind the channel's socket to a local address and configures the socket to
         // listen for connections
-        serverSocketChannel.bind(serverAddress);
+        serverSocketChannel.bind(tcpServerAddress);
         // set to non-blocking
         serverSocketChannel.configureBlocking(false);
         // obtain valid operations
         int ops = serverSocketChannel.validOps();
         // register the selector
         SelectionKey selectKy = serverSocketChannel.register(selector, ops, null); // , null
+        System.out.println("Sever has started: " + tcpServerAddress);
         // start listening
         while (true) {
-            System.out.println("Sever has started: " + serverAddress);
-            selector.select();
 
+            selector.select();
+            System.out.println("Selector: " + selector);
             Set<SelectionKey> selectedKeys = selector.selectedKeys();
             Iterator<SelectionKey> keyIterator = selectedKeys.iterator();
             while (keyIterator.hasNext()) {
-                SelectionKey myKey = keyIterator.next(); // (SelectionKey)
-
+                SelectionKey key = keyIterator.next(); // (SelectionKey)
                 // accept
-                if (myKey.isAcceptable()) {
+                if (key.isAcceptable()) {
                     SocketChannel socketChannel = serverSocketChannel.accept();
+                    System.out.println("Port: " + socketChannel.getLocalAddress().toString().split(":")[1]);
                     socketChannel.configureBlocking(false);
                     // register the socketChannel for read operations
                     socketChannel.register(selector, SelectionKey.OP_READ);
                     System.out.println("Connection accepted: " + socketChannel.getLocalAddress() + "\n");
-                } else if (myKey.isReadable()) {
+                } else if (key.isReadable()) {
                     // obtain the socket channel from the selector key
-                    SocketChannel socketChannel = (SocketChannel) myKey.channel();
+                    SocketChannel socketChannel = (SocketChannel) key.channel();
                     ByteBuffer buffer = ByteBuffer.allocate(1024);
                     // read from socket to a buffer
                     socketChannel.read(buffer);
                     // store contents from buffer into a string
                     String result = new String(buffer.array()).trim();
                     System.out.println("Message received: " + result);
+
+                    // DO STUFF HERE AND SEND RESPONSE BACK TO CLIENT
+
                     String message = "HTTP/1.1 200 OK\r\n\r\n Hello there!";
                     System.out.println("Message length: " + message.length());
                     ByteBuffer responseBuffer = ByteBuffer.allocate(message.length());
@@ -210,8 +217,6 @@ public class Station {
                 // remove the key iterator when done using it
                 keyIterator.remove();
             }
-
         }
-
     }
 }
