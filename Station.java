@@ -238,7 +238,17 @@ public class Station {
                         }
                         socketChannel.close();
                     } else if ((int) key.attachment() == station.udpPort) {
-                        System.out.println("Message received from UDP!!");
+                        // System.out.println("Message received from UDP!!");
+                        DatagramChannel dgChannel = (DatagramChannel) key.channel();
+                        ByteBuffer datagramBuffer = ByteBuffer.allocate(station.messageSize);
+                        SocketAddress remoteAddress = dgChannel.receive(datagramBuffer);
+                        datagramBuffer.flip();
+                        int limits = datagramBuffer.limit();
+                        byte bytes[] = new byte[limits];
+                        datagramBuffer.get(bytes, 0, limits);
+                        String msg = new String(bytes);
+                        System.out.println("Client at: " + remoteAddress + " ||  sent message: " + msg);
+                        dgChannel.close();
                     }
 
                 }
