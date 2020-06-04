@@ -1,4 +1,9 @@
-import java.nio.channels.*;
+import java.nio.channels.ServerSocketChannel;
+import java.nio.channels.SocketChannel;
+import java.nio.channels.Selector;
+import java.nio.channels.SelectionKey;
+import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -6,6 +11,8 @@ import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.Iterator;
+import java.util.Set;
 
 /**
  * @author Jonathan Neo
@@ -146,19 +153,58 @@ public class Station {
         for (List<String> record : timetable) {
             System.out.println("Record: " + record);
         }
+
+        // create and open the selector
+        Selector selector = Selector.open();
         // tcp: create server socket channel
         ServerSocketChannel serverSocketChannel = ServerSocketChannel.open();
-        serverSocketChannel.bind(new InetSocketAddress(station.server, station.tcpPort));
+        InetSocketAddress serverAddress = new InetSocketAddress(station.server, station.tcpPort);
+        // station.tcpPort
+        // bind the channel's socket to a local address and configures the socket to
+        // listen for connections
+        serverSocketChannel.bind(serverAddress);
+        // set to non-blocking
         serverSocketChannel.configureBlocking(false);
+        // obtain valid operations
+        int ops = serverSocketChannel.validOps();
+        // register the selector
+        SelectionKey selectKy = serverSocketChannel.register(selector, ops, null); // , null
         // start listening
         while (true) {
-            SocketChannel socketChannel = serverSocketChannel.accept();
-            if (socketChannel != null) {
-                System.out.println("An incoming connection from: " + socketChannel);
+            System.out.println("Sever has started: " + serverAddress);
+            selector.select();
+
+            Set<SelectionKey> selectedKeys = selector.selectedKeys();
+            Iterator<SelectionKey> keyIterator = selectedKeys.iterator();
+            while (keyIterator.hasNext()) {
+                SelectionKey myKey = keyIterator.next(); // (SelectionKey)
+
+                // accept
+                if (myKey.isAcceptable()) {
+                    SocketChannel socketChannel = serverSocketChannel.accept();
+                    socketChannel.configureBlocking(false);
+                    // register the socketChannel for read operations
+                    socketChannel.register(selector, SelectionKey.OP_READ);
+                    System.out.println("Connection accepted: " + socketChannel.getLocalAddress() + "\n");
+                } else if (myKey.isReadable()) {
+                    // obtain the socket channel from the selector key
+                    SocketChannel socketChannel = (SocketChannel) myKey.channel();
+                    ByteBuffer buffer = ByteBuffer.allocate(1024);
+                    // read from socket to a buffer
+                    socketChannel.read(buffer);
+                    // store contents from buffer into a string
+                    String result = new String(buffer.array()).trim();
+                    System.out.println("Message received: " + result);
+                    // perform logic here
+
+                    socketChannel.close();
+
+                }
+                // remove the key iterator when done using it
+                keyIterator.remove();
             }
+
         }
 
-        // create selector
-        // Selector selector = Selector.open();
     }
 }
