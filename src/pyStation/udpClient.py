@@ -1,6 +1,6 @@
 import socket
-PORT = 6060
-SERVER = socket.gethostbyname(socket.gethostname())
+PORT = 5001
+SERVER = "127.0.0.1"
 serverAddressPort = (SERVER, PORT)
 
 bufferSize = 1024

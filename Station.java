@@ -1,6 +1,7 @@
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.channels.Selector;
+import java.nio.channels.DatagramChannel;
 import java.nio.channels.SelectionKey;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -10,9 +11,11 @@ import java.util.List;
 import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
+import java.net.SocketAddress;
 import java.net.Socket;
 import java.util.Iterator;
 import java.util.Set;
+import java.util.HashMap;
 
 /**
  * @author Jonathan Neo
@@ -163,6 +166,9 @@ public class Station {
         // tcp: create server socket channel
         ServerSocketChannel serverSocketChannel = ServerSocketChannel.open();
         InetSocketAddress tcpServerAddress = new InetSocketAddress(station.server, station.tcpPort);
+        // HashMap<String, InetSocketAddress> tcpServerAddressHashMap = new
+        // HashMap<String, InetSocketAddress>();
+        // tcpServerAddressHashMap.put("address", tcpServerAddress);
         // bind the channel's socket to a local address and configures the socket to
         // listen for connections
         serverSocketChannel.bind(tcpServerAddress);
@@ -171,47 +177,69 @@ public class Station {
         // obtain valid operations
         int ops = serverSocketChannel.validOps();
         // register the selector
-        SelectionKey selectKy = serverSocketChannel.register(selector, ops, null); // , null
-        System.out.println("Sever has started: " + tcpServerAddress);
+        SelectionKey selectKy = serverSocketChannel.register(selector, ops, station.tcpPort); // , null
+
+        // udp: create datagram channel
+        DatagramChannel datagramChannel = DatagramChannel.open();
+        InetSocketAddress udpServerAddress = new InetSocketAddress(station.server, station.udpPort);
+        // HashMap<String, InetSocketAddress> udpServerAddressHashMap = new
+        // HashMap<String, InetSocketAddress>();
+        // udpServerAddressHashMap.put("address", udpServerAddress);
+        datagramChannel.configureBlocking(false);
+        datagramChannel.socket().bind(udpServerAddress);
+        datagramChannel.register(selector, SelectionKey.OP_READ, station.udpPort);
+
         // start listening
         while (true) {
-
+            System.out.println("Sever has started: " + tcpServerAddress);
             selector.select();
             System.out.println("Selector: " + selector);
             Set<SelectionKey> selectedKeys = selector.selectedKeys();
             Iterator<SelectionKey> keyIterator = selectedKeys.iterator();
             while (keyIterator.hasNext()) {
                 SelectionKey key = keyIterator.next(); // (SelectionKey)
+                System.out.println("Key attachment: " + key.attachment());
                 // accept
+
                 if (key.isAcceptable()) {
-                    SocketChannel socketChannel = serverSocketChannel.accept();
-                    System.out.println("Port: " + socketChannel.getLocalAddress().toString().split(":")[1]);
-                    socketChannel.configureBlocking(false);
-                    // register the socketChannel for read operations
-                    socketChannel.register(selector, SelectionKey.OP_READ);
-                    System.out.println("Connection accepted: " + socketChannel.getLocalAddress() + "\n");
-                } else if (key.isReadable()) {
-                    // obtain the socket channel from the selector key
-                    SocketChannel socketChannel = (SocketChannel) key.channel();
-                    ByteBuffer buffer = ByteBuffer.allocate(1024);
-                    // read from socket to a buffer
-                    socketChannel.read(buffer);
-                    // store contents from buffer into a string
-                    String result = new String(buffer.array()).trim();
-                    System.out.println("Message received: " + result);
+                    if ((int) key.attachment() == station.tcpPort) {
+                        SocketChannel socketChannel = serverSocketChannel.accept();
+                        System.out.println("Port: " + socketChannel.getLocalAddress().toString().split(":")[1]);
+                        socketChannel.configureBlocking(false);
+                        // register the socketChannel for read operations
+                        socketChannel.register(selector, SelectionKey.OP_READ, station.tcpPort);
+                        System.out.println("Connection accepted: " + socketChannel.getLocalAddress() + "\n");
 
-                    // DO STUFF HERE AND SEND RESPONSE BACK TO CLIENT
-
-                    String message = "HTTP/1.1 200 OK\r\n\r\n Hello there!";
-                    System.out.println("Message length: " + message.length());
-                    ByteBuffer responseBuffer = ByteBuffer.allocate(message.length());
-                    responseBuffer.clear();
-                    responseBuffer.put(message.getBytes());
-                    responseBuffer.flip();
-                    while (responseBuffer.hasRemaining()) {
-                        socketChannel.write(responseBuffer);
                     }
-                    socketChannel.close();
+                }
+                // readable
+                if (key.isReadable()) {
+
+                    if ((int) key.attachment() == station.tcpPort) {
+                        // obtain the socket channel from the selector key
+                        SocketChannel socketChannel = (SocketChannel) key.channel();
+                        ByteBuffer buffer = ByteBuffer.allocate(1024);
+                        // read from socket to a buffer
+                        socketChannel.read(buffer);
+                        // store contents from buffer into a string
+                        String result = new String(buffer.array()).trim();
+                        System.out.println("Message received: " + result);
+
+                        // DO STUFF HERE AND SEND RESPONSE BACK TO CLIENT
+
+                        String message = "HTTP/1.1 200 OK\r\n\r\n Hello there!";
+                        System.out.println("Message length: " + message.length());
+                        ByteBuffer responseBuffer = ByteBuffer.allocate(message.length());
+                        responseBuffer.clear();
+                        responseBuffer.put(message.getBytes());
+                        responseBuffer.flip();
+                        while (responseBuffer.hasRemaining()) {
+                            socketChannel.write(responseBuffer);
+                        }
+                        socketChannel.close();
+                    } else if ((int) key.attachment() == station.udpPort) {
+                        System.out.println("Message received from UDP!!");
+                    }
 
                 }
                 // remove the key iterator when done using it
