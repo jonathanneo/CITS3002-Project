@@ -5,3 +5,4 @@ datafiles*/
 tt-*
 adjacency
 startstations.sh
+*.class

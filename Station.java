@@ -70,6 +70,120 @@ public class Station {
         this.neighbours.add(neighbour);
     }
 
+    public String getStationUdpAddress() {
+        return "http://" + this.server + ":" + Integer.toString(this.udpPort);
+    }
+
+    public String getStationTcpAddress() {
+        return "http://" + this.server + ":" + Integer.toString(this.tcpPort);
+    }
+
+    public List<List<String>> getEarliestTrips(String time) {
+        // TODO
+        return null;
+    }
+
+    public Object getStationObject(String mesageId, String time) {
+        // TODO: Use simple-json
+        return null;
+    }
+
+    /**
+     * Subclass for ClientRequestLog which is used to store requests from the client
+     */
+    public class ClientRequestLog {
+        // TODO: update if needed
+    }
+
+    /**
+     * Subclass for ClientRequestLogs which is used to store a list of requests from
+     * the client
+     */
+    public class ClientRequestLogs {
+        // TODO: update if needed
+    }
+
+    /**
+     * Subclass that stores the metadata of a message sent from the station
+     */
+    public class MessageSentLog {
+        String messageId;
+        String parentAddress;
+        String stationAddress;
+        String destinationStationAddress;
+
+        /**
+         * Constructor for the MessageSentLog
+         * 
+         * @param messageId
+         * @param parentAddress
+         * @param stationAddress
+         * @param destinationStationAddress
+         */
+        public MessageSentLog(String messageId, String parentAddress, String stationAddress,
+                String destinationStationAddress) {
+            this.messageId = messageId;
+            this.parentAddress = parentAddress;
+            this.stationAddress = stationAddress;
+            this.destinationStationAddress = destinationStationAddress;
+        }
+    }
+
+    /**
+     * Subclass that stores a list of MessageSentLog's sent from the station
+     */
+    public class MessageSentLogs {
+        List<MessageSentLog> logs = new ArrayList<MessageSentLog>();
+
+        /**
+         * Method for adding log to messageSentLogs
+         * 
+         * @param log
+         */
+        public void addLog(MessageSentLog log) {
+            logs.add(log);
+        }
+
+        /**
+         * Remove the log from messageSentLogs
+         * 
+         * @param parentAddress
+         * @param destinationStationAddress
+         * @param messageId
+         * @return
+         */
+        public MessageSentLog removeLog(String parentAddress, String destinationStationAddress, String messageId) {
+            for (MessageSentLog log : this.logs) {
+                if (log.parentAddress == parentAddress && log.destinationStationAddress == destinationStationAddress
+                        && log.messageId == messageId) {
+                    this.logs.remove(log);
+                    return log;
+                }
+            }
+            return null;
+        }
+
+        /**
+         * Return found MessageSentLogs that match the messageId
+         * 
+         * @param messageId
+         * @return
+         */
+        public List<MessageSentLog> getLog(String messageId) {
+            List<MessageSentLog> foundLog = new ArrayList<MessageSentLog>();
+
+            for (MessageSentLog log : this.logs) {
+                if (log.messageId == messageId) {
+                    foundLog.add(log);
+                }
+            }
+            if (foundLog.size() > 0) {
+                return foundLog;
+            }
+            return null;
+        }
+    }
+
     /**
      * Obtain args and set values for Station
      * 
