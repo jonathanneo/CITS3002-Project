@@ -214,7 +214,7 @@ public class Station {
          * @param messageId
          * @return
          */
-        public List<MessageSentLog> getLog(String messageId) {
+        public List<MessageSentLog> getLogs(String messageId) {
             List<MessageSentLog> foundLog = new ArrayList<MessageSentLog>();
 
             for (MessageSentLog log : this.logs) {
@@ -227,6 +227,46 @@ public class Station {
             }
             return null;
         }
+    }
+
+    public class Message {
+        String sourceName;
+        String destinationName;
+        List<JSONObject> route;
+        String tripType;
+        int hopCount;
+        String time;
+        String messageId;
+        String messageType;
+        Boolean routeEndFound;
+
+        /**
+         * Constructor for the message class
+         * 
+         * @param sourceName
+         * @param destinationName
+         * @param tripType
+         * @param time
+         * @param messageId
+         * @param messageType
+         */
+        public Message(String sourceName, String destinationName, String tripType, String time, String messageId,
+                String messageType) {
+            this.sourceName = sourceName;
+            this.destinationName = destinationName;
+            this.route = new ArrayList<JSONObject>();
+            this.tripType = tripType;
+            this.hopCount = 0; // set hopCount to 0 initially
+            this.time = time;
+            this.messageId = messageId;
+            this.routeEndFound = false; // no dead end found
+        }
+
+        public void addRoute(Station station) {
+            stationObject = station.getStationObject(this.messageId, this.time);
+            this.route.add(stationObject);
+        }
+
     }
 
     /**
