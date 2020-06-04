@@ -327,7 +327,8 @@ public class Station {
      */
     public static String getRequestBody(List<String> requestArray) {
         String requestString = (String) requestArray.get(0);
-        requestString = requestString.split(" ");
+        String[] requestStringList = requestString.split(" ");
+        requestString = requestStringList[1];
         requestString = requestString.replace("/?", "");
         return requestString;
     }
@@ -340,12 +341,20 @@ public class Station {
      */
     public static List<JSONObject> getRequestObject(String requestBody) {
         List<JSONObject> requestBodyObjects = new ArrayList<JSONObject>();
-        List<String> requestBodyList = requestBody.split("&");
+        String[] requestBodyList = requestBody.split("&");
         for (String item : requestBodyList) {
-            pair = item.split("=");
-            requestBodyObjects.add(new JSONObject().put(pair.get(0), pair.get(1)));
+            String[] pair = item.split("=");
+            JSONObject obj = new JSONObject();
+            obj.put((String) pair[0], (String) pair[1]);
+            requestBodyObjects.add(obj);
         }
         return requestBodyObjects;
+    }
+
+    public static JSONObject matchRoute(JSONObject msg) {
+        JSONArray routes = (JSONArray) msg.get("route");
+        int numRoutes = routes.size();
+        return new JSONObject();
     }
 
     /**
