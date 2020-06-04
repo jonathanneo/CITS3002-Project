@@ -115,9 +115,22 @@ public class Station {
         }
     }
 
-    public Object getStationObject(String mesageId, String time) {
-        // TODO: Use simple-json
-        return null;
+    /**
+     * Get the station object
+     * 
+     * @param messageId
+     * @param time
+     * @return station object
+     * @throws Exception when (String) Time cannot be casted to (SimpleDateFormat)
+     *                   Time
+     */
+    public JSONObject getStationObject(String messageId, String time) throws Exception {
+        JSONObject obj = new JSONObject();
+        obj.put("stationName", this.stationName);
+        obj.put("messageId", messageId);
+        obj.put("stationUDPAddress", this.getStationUdpAddress());
+        obj.put("earliestTrips", this.getEarliestTrips(time));
+        return obj;
     }
 
     /**
