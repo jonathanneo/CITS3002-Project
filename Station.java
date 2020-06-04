@@ -1,7 +1,11 @@
+import java.nio.channels.*;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.io.*;
+import java.net.InetSocketAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
 
 /**
  * @author Jonathan Neo
@@ -18,10 +22,8 @@ public class Station {
     // variables
     String stationName;
     int messageSize;
-    String tcpPort;
-    String udpPort;
-    String tcpAddress;
-    String udpAddress;
+    int tcpPort;
+    int udpPort;
     String format;
     String server;
     List<Station> neighbours;
@@ -36,8 +38,13 @@ public class Station {
      */
     public Station(String stationName, String tcpPort, String udpPort) {
         this.stationName = stationName;
-        this.tcpPort = tcpPort;
-        this.udpPort = udpPort;
+        // tcp port may be empty if it is used as a neighbour
+        try {
+            this.tcpPort = Integer.parseInt(tcpPort);
+        } catch (Exception e) {
+            this.tcpPort = -1;
+        }
+        this.udpPort = Integer.parseInt(udpPort);
         this.server = this.SERVER;
         this.messageSize = this.MESSAGE_SIZE;
         this.format = this.FORMAT;
@@ -139,5 +146,19 @@ public class Station {
         for (List<String> record : timetable) {
             System.out.println("Record: " + record);
         }
+        // tcp: create server socket channel
+        ServerSocketChannel serverSocketChannel = ServerSocketChannel.open();
+        serverSocketChannel.bind(new InetSocketAddress(station.server, station.tcpPort));
+        serverSocketChannel.configureBlocking(false);
+        // start listening
+        while (true) {
+            SocketChannel socketChannel = serverSocketChannel.accept();
+            if (socketChannel != null) {
+                System.out.println("An incoming connection from: " + socketChannel);
+            }
+        }
+
+        // create selector
+        // Selector selector = Selector.open();
     }
 }
