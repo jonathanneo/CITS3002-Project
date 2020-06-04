@@ -249,8 +249,24 @@ public class Station {
                         String msg = new String(bytes);
                         System.out.println("Client at: " + remoteAddress + " ||  sent message: " + msg);
                         dgChannel.close();
-                    }
 
+                        // DO STUFF WITH DATAGRAM MESSAGE
+
+                        DatagramChannel dgSendChannel = DatagramChannel.open();
+                        String datagramSendMsg = "Right back at ya!";
+                        ByteBuffer datagramSendBuffer = ByteBuffer.wrap(datagramSendMsg.getBytes());
+                        dgSendChannel.send(datagramSendBuffer, new InetSocketAddress(station.server,
+                                Integer.parseInt(remoteAddress.toString().split(":")[1])));
+                        datagramSendBuffer.clear();
+                        dgSendChannel.close();
+                        // for (Station neighbour : station.neighbours) {
+                        // dgSendChannel.send(datagramSendBuffer,
+                        // new InetSocketAddress(station.server, neighbour.udpPort));
+                        // datagramSendBuffer.clear();
+                        // dgSendChannel.close();
+                        // }
+
+                    }
                 }
                 // remove the key iterator when done using it
                 keyIterator.remove();
