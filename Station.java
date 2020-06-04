@@ -22,6 +22,9 @@ import org.json.simple.parser.ParseException;
 import org.json.simple.parser.JSONParser;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.nio.file.*;
+import java.sql.JDBCType;
+import java.nio.charset.StandardCharsets;
 
 /**
  * @author Jonathan Neo
@@ -317,11 +320,40 @@ public class Station {
     }
 
     /**
+     * Get request body
+     * 
+     * @param requestArray
+     * @return
+     */
+    public static String getRequestBody(List<String> requestArray) {
+        String requestString = (String) requestArray.get(0);
+        requestString = requestString.split(" ");
+        requestString = requestString.replace("/?", "");
+        return requestString;
+    }
+
+    /**
+     * Get an object pairing of request items
+     * 
+     * @param requestBody
+     * @return
+     */
+    public static List<JSONObject> getRequestObject(String requestBody) {
+        List<JSONObject> requestBodyObjects = new ArrayList<JSONObject>();
+        List<String> requestBodyList = requestBody.split("&");
+        for (String item : requestBodyList) {
+            pair = item.split("=");
+            requestBodyObjects.add(new JSONObject().put(pair.get(0), pair.get(1)));
+        }
+        return requestBodyObjects;
+    }
+
+    /**
      * Obtain args and set values for Station
      * 
      * @param args input arguments
      */
-    static private List<Object> getArguments(String[] args) {
+    public static List<Object> getArguments(String[] args) {
 
         String stationName = new String();
         String tcpPort = new String();
@@ -380,10 +412,6 @@ public class Station {
         }
     }
 
-    public static void listenTcpServer() {
-
-    }
-
     public static void main(String[] args) throws Exception {
         // check arguments
         checkArguments(args);
@@ -406,6 +434,13 @@ public class Station {
         for (List<String> record : timetable) {
             System.out.println("Record: " + record);
         }
+        String htmlPathString = System.getProperty("user.dir") + "/station.html";
+        Path htmlPath = Paths.get(htmlPathString);
+        // String htmlContent = getHtmlContent(htmlPath, station.format);
+        String htmlContent = Files.readString(htmlPath, StandardCharsets.US_ASCII);
+        htmlContent = htmlContent.replace("{summarisedTrip}", "Hello There!");
+        htmlContent = htmlContent.replace("{station}", station.stationName);
+        System.out.println("HTML Content" + htmlContent);
 
         // create and open the selector
         Selector selector = Selector.open();
@@ -473,7 +508,7 @@ public class Station {
 
                         // DO STUFF HERE AND SEND RESPONSE BACK TO CLIENT
 
-                        String message = "HTTP/1.1 200 OK\r\n\r\n Hello there!";
+                        String message = "HTTP/1.1 200 OK\r\n\r\n" + htmlContent;
                         System.out.println("Message length: " + message.length());
                         ByteBuffer responseBuffer = ByteBuffer.allocate(message.length());
                         responseBuffer.clear();
