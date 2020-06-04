@@ -88,7 +88,7 @@ public class Station {
         return Arrays.asList(station, neighbourPorts);
     }
 
-    public List<List<String>> getTimetable(String path) throws Exception {
+    public static List<List<String>> getTimetable(String path) throws Exception {
         List<List<String>> records = new ArrayList<>();
         try (BufferedReader br = new BufferedReader(new FileReader(path))) {
             String line;
@@ -110,12 +110,16 @@ public class Station {
         }
     }
 
-    public static void main(String[] args) throws Exception {
+    public static void checkArguments(String[] args) throws Exception {
         if (args.length < 3) {
             throw new Exception(
                     "Please at least provide (1) Station Name, (2) Station's TCP Port, (3) Station's UDP Port. (Optional) Provide neighbour ports.");
         }
+    }
 
+    public static void main(String[] args) throws Exception {
+        // check arguments
+        checkArguments(args);
         // get arguments
         List<Object> argResult = getArguments(args);
         Station station = (Station) argResult.get(0);
@@ -128,6 +132,12 @@ public class Station {
         // get file path
         String path = System.getProperty("user.dir") + "/tt-" + station.stationName;
         System.out.println("Path: " + path);
-
+        // get timetable
+        List<List<String>> timetable = getTimetable(path);
+        // set timetable
+        station.setTimetable(timetable);
+        for (List<String> record : timetable) {
+            System.out.println("Record: " + record);
+        }
     }
 }
