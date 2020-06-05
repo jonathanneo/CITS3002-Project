@@ -646,6 +646,15 @@ public class Station {
         return -1; // not found
     }
 
+    /**
+     * Updates the timetable if the file last modified time has changed
+     * 
+     * @param station
+     * @param path
+     * @param fileTime
+     * @return
+     * @throws Exception
+     */
     public static Long checkAndUpdateTimetable(Station station, String path, Long fileTime) throws Exception {
         Long modifiedTime = new File(path).lastModified();
         if (fileTime != modifiedTime) {
@@ -742,6 +751,7 @@ public class Station {
         for (List<String> record : timetable) {
             System.out.println("Record: " + record);
         }
+        Long fileTime = new File(path).lastModified();
         String htmlPathString = System.getProperty("user.dir") + "/station.html";
         Path htmlPath = Paths.get(htmlPathString);
         // String htmlContent = getHtmlContent(htmlPath, station.format);
@@ -786,6 +796,8 @@ public class Station {
             Set<SelectionKey> selectedKeys = selector.selectedKeys();
             Iterator<SelectionKey> keyIterator = selectedKeys.iterator();
             while (keyIterator.hasNext()) {
+                // check and update timetable
+                fileTime = checkAndUpdateTimetable(station, path, fileTime);
                 SelectionKey key = keyIterator.next(); // (SelectionKey)
                 System.out.println("Key attachment: " + key.attachment());
                 // accept
