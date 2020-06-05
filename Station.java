@@ -804,18 +804,19 @@ public class Station {
         String parentHost = parentUdpAddress.split(":")[0];
         String parentPort = parentUdpAddress.split(":")[1];
         ByteBuffer datagramSendBuffer = ByteBuffer.wrap(msgString.getBytes());
+
         try {
             DatagramChannel dgSendChannel = DatagramChannel.open();
+            dgSendChannel.configureBlocking(false);
             dgSendChannel.send(datagramSendBuffer, new InetSocketAddress(parentHost, Integer.parseInt(parentPort)));
-            datagramSendBuffer.clear();
-            dgSendChannel.close();
             System.out.println("Msg sent to parent: " + parentUdpAddress);
+            dgSendChannel.close();
         } catch (Exception e) {
-            // should not fail
+            // do nothing
         }
     }
 
-    public Boolean sendUdp(Station station, Message msg, MessageSentLogs messageSentLogs) {
+    public Boolean sendUdp(Station station, Message msg, MessageSentLogs messageSentLogs) throws IOException {
         Gson gson = new Gson();
         String msgString = gson.toJson(msg);
         ByteBuffer datagramSendBuffer = ByteBuffer.wrap(msgString.getBytes());
@@ -850,12 +851,16 @@ public class Station {
                 }
                 try {
                     DatagramChannel dgSendChannel = DatagramChannel.open();
+
+                    dgSendChannel.configureBlocking(false);
                     dgSendChannel.send(datagramSendBuffer, new InetSocketAddress(station.server, neighbour.udpPort));
-                    datagramSendBuffer.clear();
+
                     dgSendChannel.close();
                     System.out.println("Msg Sent to neighbour: " + neighbour.getStationUdpAddress());
+                    sentToNeighbours++;
+
                 } catch (Exception e) {
-                    // it should never fail
+                    // nothing
                 }
             }
         }
@@ -1035,7 +1040,7 @@ public class Station {
                             if (msg.destinationName.equals(station.stationName)) {
                                 // dead end found. I am the destination.
                                 msg.routeEndFound = true;
-
+                                sendUdpToParent(station, msg, 0);
                             }
                         }
 
