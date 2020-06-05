@@ -147,7 +147,7 @@ public class Station {
      * 
      * @param messageId
      * @param time
-     * @return station object
+     * @return StationObject
      * @throws Exception when (String) Time cannot be casted to (SimpleDateFormat)
      *                   Time
      */
@@ -488,6 +488,78 @@ public class Station {
         }
         message.route.get(message.hopCount).earliestTrips = newEarliestTrips;
         return message;
+    }
+
+    /**
+     * Add a station to the message's route
+     * 
+     * @param message
+     * @param station
+     * @param messageId
+     * @return
+     * @throws Exception when time (string) cannot be casted to time (date)
+     */
+    public static Message addStationToRoute(Message message, Station station, String messageId) throws Exception {
+        String lastRouteTime = "";
+        for (List<String> trip : message.route.get(message.hopCount).earliestTrips) {
+            if (trip.get(4) == station.stationName) {
+                lastRouteTime = trip.get(3);
+            }
+        }
+        StationObject stationObject = station.getStationObject(messageId, lastRouteTime);
+        message.route.add(stationObject);
+        message.hopCount++;
+        return message;
+    }
+
+    public static Message collateMessages(Message msg, MessageBank messageBank) {
+        Message earliestMessage = null;
+        String tripType = msg.tripType;
+        int hopCount = msg.hopCount;
+        String messageId = msg.route.get(msg.hopCount).messageId;
+        String destinationName = msg.destinationName;
+        String earliestTime;
+
+        if (tripType == "FastestTrip") {
+            for (Message message : messageBank.bank) {
+                try {
+                    if (message.routeEndFound == false && message.route.get(message.hopCount).messageId == messageId) {
+                        earliestTime = message.route.get(message.route.size() - 1).earliestTrips.get(0).get(4);
+                        earliestMessage = message;
+                        break;
+                    }
+                } catch (Exception e) {
+                    // do nothing - the message is some other message that doesn't have the same
+                    // hopCount
+                }
+            }
+            for (Message message : messageBank.bank) {
+                try {
+                    if (message.routeEndFound == false
+                            && message.route.get(message.route.size() - 1).earliestTrips.size() > 0
+                            && message.route.get(message.hopCount).messageId == messageId) {
+                        String compareEarliestTime = message.route.get(message.size() - 1).earliestTrips.get(0).get(4);
+                        Date dteCompareEarliestTime = new SimpleDateFormat("HH:mm").parse(compareEarliestTime);
+                        Date dteEarliestTime = new SimpleDateFormat("HH:mm").parse(earliestTime);
+                        if (dteCompareEarliestTime.compareTo(dteCompareEarliestTime) < 0) {
+                            earliestTime = compareEarliestTime;
+                            earliestMessage = message;
+                        }
+                    }
+                } catch (Exception e) {
+                    // do nothing. the message is some other mssage that doens't have to same
+                    // hopCount
+                }
+            }
+        }
+        if (earliestMessage != null) {
+            return earliestMessage;
+        } else {
+            msg.routeEndFound = true;
+            msg.messageType = "incoming";
+            return msg;
+        }
+
     }
 
     /**
