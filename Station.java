@@ -9,6 +9,7 @@ import java.nio.file.*;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.UUID;
 import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
@@ -31,7 +32,7 @@ public class Station {
     // CONSTANTS
     String SERVER = "127.0.0.1";
     String FORMAT = "UTF-8";
-    String TRIP_TYPE = "FastestTrip";
+    String[] TRIP_TYPE = { "FastestTrip" };
     int MESSAGE_SIZE = 10000;
 
     // variables
@@ -448,6 +449,13 @@ public class Station {
         return message;
     }
 
+    /**
+     * Checks if the destination is within reach from the station
+     * 
+     * @param station
+     * @param msg
+     * @return List<Object> containing [Boolean, List<StationObject>]
+     */
     public static List<Object> findDestination(Station station, Message msg) {
         List<Object> returnList = new ArrayList<Object>();
         String destinationName = msg.destinationName;
@@ -657,10 +665,11 @@ public class Station {
      */
     public static Long checkAndUpdateTimetable(Station station, String path, Long fileTime) throws Exception {
         Long modifiedTime = new File(path).lastModified();
-        if (fileTime != modifiedTime) {
+        if (fileTime.longValue() != modifiedTime.longValue()) {
             List<List<String>> timetable = getTimetable(path);
             // set timetable
             station.setTimetable(timetable);
+            System.out.println("file modified. udpated time: " + modifiedTime);
             return modifiedTime;
         }
         return fileTime;
@@ -703,6 +712,7 @@ public class Station {
     public static List<List<String>> getTimetable(String path) throws Exception {
         List<List<String>> records = new ArrayList<>();
         try (BufferedReader br = new BufferedReader(new FileReader(path))) {
+            String headerLine = br.readLine(); // read the header line but do nothing with it
             String line;
             while ((line = br.readLine()) != null) {
                 String[] values = line.split(",");
@@ -756,8 +766,6 @@ public class Station {
         Path htmlPath = Paths.get(htmlPathString);
         // String htmlContent = getHtmlContent(htmlPath, station.format);
         String htmlContent = Files.readString(htmlPath, StandardCharsets.US_ASCII);
-        htmlContent = htmlContent.replace("{summarisedTrip}", "Hello There!");
-        htmlContent = htmlContent.replace("{station}", station.stationName);
         System.out.println("HTML Content" + htmlContent);
 
         // create and open the selector
@@ -765,9 +773,6 @@ public class Station {
         // tcp: create server socket channel
         ServerSocketChannel serverSocketChannel = ServerSocketChannel.open();
         InetSocketAddress tcpServerAddress = new InetSocketAddress(station.server, station.tcpPort);
-        // HashMap<String, InetSocketAddress> tcpServerAddressHashMap = new
-        // HashMap<String, InetSocketAddress>();
-        // tcpServerAddressHashMap.put("address", tcpServerAddress);
         // bind the channel's socket to a local address and configures the socket to
         // listen for connections
         serverSocketChannel.bind(tcpServerAddress);
@@ -776,14 +781,11 @@ public class Station {
         // obtain valid operations
         int ops = serverSocketChannel.validOps();
         // register the selector
-        SelectionKey selectKy = serverSocketChannel.register(selector, ops, station.tcpPort); // , null
+        SelectionKey selectKy = serverSocketChannel.register(selector, ops, station.tcpPort);
 
         // udp: create datagram channel
         DatagramChannel datagramChannel = DatagramChannel.open();
         InetSocketAddress udpServerAddress = new InetSocketAddress(station.server, station.udpPort);
-        // HashMap<String, InetSocketAddress> udpServerAddressHashMap = new
-        // HashMap<String, InetSocketAddress>();
-        // udpServerAddressHashMap.put("address", udpServerAddress);
         datagramChannel.configureBlocking(false);
         datagramChannel.socket().bind(udpServerAddress);
         datagramChannel.register(selector, SelectionKey.OP_READ, station.udpPort);
@@ -810,7 +812,6 @@ public class Station {
                         // register the socketChannel for read operations
                         socketChannel.register(selector, SelectionKey.OP_READ, station.tcpPort);
                         System.out.println("Connection accepted: " + socketChannel.getLocalAddress() + "\n");
-
                     }
                 }
                 // readable
@@ -823,8 +824,30 @@ public class Station {
                         // read from socket to a buffer
                         socketChannel.read(buffer);
                         // store contents from buffer into a string
-                        String result = new String(buffer.array()).trim();
-                        System.out.println("Message received: " + result);
+                        String requestBody = new String(buffer.array()).trim();
+                        System.out.println("Message received: " + requestBody);
+                        if (requestBody.indexOf("to") != -1) {
+                            // contains message
+                            List<HashMap<String, String>> requestMap = getRequestObject(requestBody);
+                            String messageId = UUID.randomUUID().toString();
+                            System.out.println("Message received. Generate message ID: " + messageId);
+                            Message msg = station.getMessageToSend(requestMap, station, messageId);
+                            List<Object> findDestResult = findDestination(station, msg);
+                            Boolean destFound = (Boolean) findDestResult.get(0);
+                            List<StationObject> earliestTrip = (List<StationObject>) findDestResult.get(1);
+                        } else {
+                            Gson gson = new Gson();
+                            // send empty page to client
+                            htmlContent = htmlContent.replace("{summarisedTrip}", "");
+                            htmlContent = htmlContent.replace("{station}", station.stationName);
+                            htmlContent = htmlContent.replace("{timetable}", gson.toJson(station.timetable));
+                            htmlContent = htmlContent.replace("{stationTcpAddress}", station.getStationTcpAddress());
+                            htmlContent = htmlContent.replace("{tripTypes}", gson.toJson(station.TRIP_TYPE));
+                            htmlContent = htmlContent.replace("{stationResponse}", "false");
+                            htmlContent = htmlContent.replace("{responses}", gson.toJson(""));
+                            htmlContent = htmlContent.replace("{routeEndFound}", "false");
+                            System.out.println("html content: " + htmlContent);
+                        }
 
                         // DO STUFF HERE AND SEND RESPONSE BACK TO CLIENT
 
@@ -847,7 +870,9 @@ public class Station {
                         int limits = datagramBuffer.limit();
                         byte bytes[] = new byte[limits];
                         datagramBuffer.get(bytes, 0, limits);
-                        String msg = new String(bytes);
+                        String msgString = new String(bytes);
+                        Gson gson = new Gson();
+                        Message msg = gson.fromJson(msgString, Message.class);
                         System.out.println("Client at: " + remoteAddress + " ||  sent message: " + msg);
                         dgChannel.close();
 
