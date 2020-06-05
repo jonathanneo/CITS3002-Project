@@ -466,6 +466,30 @@ public class Station {
         return returnList;
     }
 
+    public static String getSummarisedTrip(Message msg) {
+        String sourceName = msg.sourceName;
+        String destinationName = msg.destinationName;
+        List<String> sourceTrip = msg.route.get(0).earliestTrips.get(0);
+        List<String> destinationTrip = msg.route.get(msg.route.size() - 1).earliestTrips.get(0);
+        String summarisedTrip = "Depart from " + sourceName + " (" + sourceTrip.get(3) + ") taking " + sourceTrip.get(2)
+                + " and eventually arrive at " + destinationName + " at " + destinationTrip.get(4)
+                + ". View trip details below.";
+        return summarisedTrip;
+    }
+
+    public static Message removeNonDestination(Message message, Station station) {
+        List<List<String>> newEarliestTrips = new ArrayList<List<String>>();
+        String destination = message.destinationName;
+        List<List<String>> earliestTrips = message.route.get(message.hopCount).earliestTrips;
+        for (List<String> trip : earliestTrips) {
+            if (trip.get(4) == destination) {
+                newEarliestTrips.add(trip);
+            }
+        }
+        message.route.get(message.hopCount).earliestTrips = newEarliestTrips;
+        return message;
+    }
+
     /**
      * Obtain args and set values for Station
      * 
