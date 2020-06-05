@@ -518,7 +518,7 @@ public class Station {
         int hopCount = msg.hopCount;
         String messageId = msg.route.get(msg.hopCount).messageId;
         String destinationName = msg.destinationName;
-        String earliestTime;
+        String earliestTime = "";
 
         if (tripType == "FastestTrip") {
             for (Message message : messageBank.bank) {
@@ -538,10 +538,11 @@ public class Station {
                     if (message.routeEndFound == false
                             && message.route.get(message.route.size() - 1).earliestTrips.size() > 0
                             && message.route.get(message.hopCount).messageId == messageId) {
-                        String compareEarliestTime = message.route.get(message.size() - 1).earliestTrips.get(0).get(4);
+                        String compareEarliestTime = message.route.get(message.route.size() - 1).earliestTrips.get(0)
+                                .get(4);
                         Date dteCompareEarliestTime = new SimpleDateFormat("HH:mm").parse(compareEarliestTime);
                         Date dteEarliestTime = new SimpleDateFormat("HH:mm").parse(earliestTime);
-                        if (dteCompareEarliestTime.compareTo(dteCompareEarliestTime) < 0) {
+                        if (dteCompareEarliestTime.compareTo(dteEarliestTime) < 0) {
                             earliestTime = compareEarliestTime;
                             earliestMessage = message;
                         }
@@ -559,7 +560,60 @@ public class Station {
             msg.messageType = "incoming";
             return msg;
         }
+    }
 
+    /**
+     * Checks if the message has visited all stations in the route. If 0, that means
+     * that there is no earliest trip from the station and hence no route is found.
+     * 
+     * @param msg
+     * @return number of stations not yet visited
+     */
+    public static int removeVisitedFromEarliestTrips(Message msg) {
+        int visited = 0;
+        for (List<String> trip : msg.route.get(msg.hopCount).earliestTrips) {
+            for (StationObject route : msg.route) {
+                if (trip.get(4) == route.stationName) {
+                    visited++;
+                }
+            }
+        }
+        return msg.route.get(msg.hopCount).earliestTrips.size() - visited;
+    }
+
+    /**
+     * Determines if there is a dead-end
+     * 
+     * @param station
+     * @param msg
+     * @return true if there is a dead-end. returns false otherwise.
+     */
+    public static Boolean routeEnd(Station station, Message msg) {
+        List<Boolean> visited = new ArrayList<Boolean>();
+        List<StationObject> routes = msg.route;
+
+        if (removeVisitedFromEarliestTrips(msg) == 0) {
+            return true;
+        }
+
+        for (Station neighbour : station.neighbours) {
+            Boolean visit = false;
+            for (StationObject route : routes) {
+                if (route.stationUDPAddress == neighbour.getStationUdpAddress()) {
+                    visit = true;
+                    break;
+                }
+            }
+            visited.add(visit);
+        }
+
+        for (Boolean visit : visited) {
+            if (visit == false) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
