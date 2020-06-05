@@ -20,6 +20,7 @@ import org.json.simple.JSONObject;
 import org.json.simple.JSONArray;
 import org.json.simple.parser.ParseException;
 import org.json.simple.parser.JSONParser;
+import com.google.gson.*;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.nio.file.*;
@@ -120,6 +121,32 @@ public class Station {
     }
 
     /**
+     * Class to hold the station object
+     */
+    public class StationObject {
+        String stationName;
+        String messageId;
+        String stationUDPAddress;
+        List<List<String>> earliestTrips;
+
+        /**
+         * Constructor of the stationObject
+         * 
+         * @param stationName
+         * @param messageId
+         * @param stationUDPAddress
+         * @param earliestTrips
+         */
+        public StationObject(String stationName, String messageId, String stationUDPAddress,
+                List<List<String>> earliestTrips) {
+            this.stationName = stationName;
+            this.messageId = messageId;
+            this.stationUDPAddress = stationUDPAddress;
+            this.earliestTrips = earliestTrips;
+        }
+    }
+
+    /**
      * Get the station object
      * 
      * @param messageId
@@ -128,12 +155,9 @@ public class Station {
      * @throws Exception when (String) Time cannot be casted to (SimpleDateFormat)
      *                   Time
      */
-    public JSONObject getStationObject(String messageId, String time) throws Exception {
-        JSONObject obj = new JSONObject();
-        obj.put("stationName", this.stationName);
-        obj.put("messageId", messageId);
-        obj.put("stationUDPAddress", this.getStationUdpAddress());
-        obj.put("earliestTrips", this.getEarliestTrips(time));
+    public StationObject getStationObject(String messageId, String time) throws Exception {
+        StationObject obj = new StationObject(this.stationName, messageId, this.getStationUdpAddress(),
+                this.getEarliestTrips(time));
         return obj;
     }
 
@@ -240,7 +264,7 @@ public class Station {
     public class Message {
         String sourceName;
         String destinationName;
-        List<JSONObject> route;
+        List<StationObject> route;
         String tripType;
         int hopCount;
         String time;
@@ -262,7 +286,7 @@ public class Station {
                 String messageType) {
             this.sourceName = sourceName;
             this.destinationName = destinationName;
-            this.route = new ArrayList<JSONObject>();
+            this.route = new ArrayList<StationObject>();
             this.tripType = tripType;
             this.hopCount = 0; // set hopCount to 0 initially
             this.time = time;
@@ -277,7 +301,7 @@ public class Station {
          * @exception time cannot be casted to date
          */
         public void addRoute(Station station) throws Exception {
-            JSONObject stationObject = station.getStationObject(this.messageId, this.time);
+            StationObject stationObject = station.getStationObject(this.messageId, this.time);
             this.route.add(stationObject);
         }
     }
@@ -287,24 +311,24 @@ public class Station {
      * here until can be collated and sent to parent
      */
     public class MessageBank {
-        List<JSONObject> bank = new ArrayList<JSONObject>();
+        List<Message> bank = new ArrayList<Message>();
 
         /**
          * Add message to message bank
          * 
          * @param message
          */
-        public void addMessage(JSONObject message) {
+        public void addMessage(Message message) {
             this.bank.add(message);
         }
 
-        public List<JSONObject> removeMessage(int hopCount, String messageId) {
-            List<JSONObject> removedMessages = new ArrayList<JSONObject>();
-            for (JSONObject message : this.bank) {
+        public List<Message> removeMessage(int hopCount, String messageId) {
+            List<Message> removedMessages = new ArrayList<Message>();
+            for (Message message : this.bank) {
                 try {
-                    JSONArray route = (JSONArray) message.get("route");
-                    JSONObject bankStation = (JSONObject) route.get(hopCount);
-                    String bankMessageId = (String) bankStation.get("messageId");
+                    List<StationObject> route = (List<StationObject>) message.route;
+                    StationObject bankStation = (StationObject) route.get(hopCount);
+                    String bankMessageId = (String) bankStation.messageId;
                     if (bankMessageId == messageId) {
                         removedMessages.add(message);
                     }
@@ -313,7 +337,7 @@ public class Station {
                     // hopCount
                 }
             }
-            for (JSONObject removedMessage : removedMessages) {
+            for (Message removedMessage : removedMessages) {
                 this.bank.remove(removedMessage);
             }
             return removedMessages;
@@ -340,12 +364,12 @@ public class Station {
      * @param requestBody
      * @return
      */
-    public static List<JSONObject> getRequestObject(String requestBody) {
-        List<JSONObject> requestBodyObjects = new ArrayList<JSONObject>();
+    public static List<HashMap<String, String>> getRequestObject(String requestBody) {
+        List<HashMap<String, String>> requestBodyObjects = new ArrayList<HashMap<String, String>>();
         String[] requestBodyList = requestBody.split("&");
         for (String item : requestBodyList) {
             String[] pair = item.split("=");
-            JSONObject obj = new JSONObject();
+            HashMap<String, String> obj = new HashMap<String, String>();
             obj.put((String) pair[0], (String) pair[1]);
             requestBodyObjects.add(obj);
         }
@@ -358,23 +382,23 @@ public class Station {
      * @param msg
      * @return msg containing earliest trips that aren't duplicates
      */
-    public static JSONObject matchRoute(JSONObject msg) {
-        JSONArray routes = (JSONArray) msg.get("route");
+    public static Message matchRoute(Message msg) {
+        List<StationObject> routes = (List<StationObject>) msg.route;
         int numRoutes = routes.size();
         for (int index = 0; index < numRoutes; index++) {
-            JSONObject route = (JSONObject) routes.get(index);
-            List<List<String>> earliestTrips = (List<List<String>>) route.get("earliestTrips");
+            StationObject route = (StationObject) routes.get(index);
+            List<List<String>> earliestTrips = (List<List<String>>) route.earliestTrips;
             List<List<String>> removeTrip = new ArrayList<List<String>>();
             if (index + 1 < numRoutes) {
                 for (List<String> trip : earliestTrips) {
-                    JSONObject nextRoute = (JSONObject) routes.get(index + 1);
-                    if (trip.get(4) != nextRoute.get("stationName")) {
+                    StationObject nextRoute = (StationObject) routes.get(index + 1);
+                    if (trip.get(4) != nextRoute.stationName) {
                         removeTrip.add(trip);
                     }
                 }
             } else {
                 for (List<String> trip : earliestTrips) {
-                    if (trip.get(4) != msg.get("destinationName")) {
+                    if (trip.get(4) != msg.destinationName) {
                         removeTrip.add(trip);
                     }
                 }
@@ -386,39 +410,43 @@ public class Station {
         return msg;
     }
 
-    public static Message getMessageToSend(List<JSONObject> requestObject, Station station, String messageId) {
-        String destination = "";
-        String time = "";
-        String tripType = "";
-        String messageType = "outgoing";
-        for (JSONObject item : requestObject) {
-            if (item.get("to") != null) {
-                destination = (String) item.get("to");
-            }
-            if (item.get("time") != null) {
-                time = (String) item.get("time");
-                // decode time
-                try {
-                    time = java.net.URLDecoder.decode(time, StandardCharsets.UTF_8.name());
-                } catch (UnsupportedEncodingException e) {
-                    // not going to happen - value came from JDK's own StandardCharsets
-                }
-            }
-            if (item.get("tripType") != null) {
-                tripType = (String) item.get("tripType");
-            }
-        }
-        if (time == "") {
-            Date date = new Date();
-            SimpleDateFormat formatter = new SimpleDateFormat("HH:mm");
-            time = formatter.format(date);
-        }
-        if (tripType == "") {
-            tripType = "FastestTrip";
-        }
-        Message message = Message(station.stationName, destination, tripType, time, messageId, messageType);
-        // message =
-    }
+    // public static Message getMessageToSend(List<JSONObject> requestObject,
+    // Station station, String messageId) {
+    // String destination = "";
+    // String time = "";
+    // String tripType = "";
+    // String messageType = "outgoing";
+    // for (JSONObject item : requestObject) {
+    // if (item.get("to") != null) {
+    // destination = (String) item.get("to");
+    // }
+    // if (item.get("time") != null) {
+    // time = (String) item.get("time");
+    // // decode time
+    // try {
+    // time = java.net.URLDecoder.decode(time, StandardCharsets.UTF_8.name());
+    // } catch (UnsupportedEncodingException e) {
+    // // not going to happen - value came from JDK's own StandardCharsets
+    // }
+    // }
+    // if (item.get("tripType") != null) {
+    // tripType = (String) item.get("tripType");
+    // }
+    // }
+    // if (time == "") {
+    // Date date = new Date();
+    // SimpleDateFormat formatter = new SimpleDateFormat("HH:mm");
+    // time = formatter.format(date);
+    // }
+    // if (tripType == "") {
+    // tripType = "FastestTrip";
+    // }
+    // // Message message = Message(station.stationName, destination, tripType,
+    // time,
+    // // messageId, messageType);
+    // // message =
+    // return new Message();
+    // }
 
     /**
      * Obtain args and set values for Station
