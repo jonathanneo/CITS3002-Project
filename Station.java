@@ -794,6 +794,27 @@ public class Station {
         return htmlContent;
     }
 
+    public void sendUdpToParent(Station station, Message msg, int hopCountDeduct) {
+        msg.messageType = "incoming";
+        msg.hopCount = msg.hopCount - hopCountDeduct;
+        Gson gson = new Gson();
+        String msgString = gson.toJson(msg);
+        StationObject parent = msg.route.get(msg.hopCount);
+        String parentUdpAddress = parent.stationUDPAddress.replace("http://", "");
+        String parentHost = parentUdpAddress.split(":")[0];
+        String parentPort = parentUdpAddress.split(":")[1];
+        ByteBuffer datagramSendBuffer = ByteBuffer.wrap(msgString.getBytes());
+        try {
+            DatagramChannel dgSendChannel = DatagramChannel.open();
+            dgSendChannel.send(datagramSendBuffer, new InetSocketAddress(parentHost, Integer.parseInt(parentPort)));
+            datagramSendBuffer.clear();
+            dgSendChannel.close();
+            System.out.println("Msg sent to parent: " + parentUdpAddress);
+        } catch (Exception e) {
+            // should not fail
+        }
+    }
+
     public Boolean sendUdp(Station station, Message msg, MessageSentLogs messageSentLogs) {
         Gson gson = new Gson();
         String msgString = gson.toJson(msg);
@@ -991,7 +1012,7 @@ public class Station {
                         }
                         socketChannel.close();
                     } else if ((int) key.attachment() == station.udpPort) {
-                        // System.out.println("Message received from UDP!!");
+                        // Receive message
                         DatagramChannel dgChannel = (DatagramChannel) key.channel();
                         ByteBuffer datagramBuffer = ByteBuffer.allocate(station.messageSize);
                         SocketAddress remoteAddress = dgChannel.receive(datagramBuffer);
@@ -1002,12 +1023,23 @@ public class Station {
                         String msgString = new String(bytes);
                         Gson gson = new Gson();
                         Message msg = gson.fromJson(msgString, Message.class);
-                        System.out.println("Client at: " + remoteAddress + " ||  sent message: " + msg);
+                        System.out.println(
+                                "Client at: " + remoteAddress + " ||  sent message: " + gson.toJson(msg.route));
                         dgChannel.close();
 
-                        // DO STUFF WITH DATAGRAM MESSAGE
+                        // INCOMING MESSAGE
+                        if (msg.messageType.equals("incoming")) {
 
-                        // SEND MESSAGE
+                        } else {
+                            // OUTGOING MESSAGE
+                            if (msg.destinationName.equals(station.stationName)) {
+                                // dead end found. I am the destination.
+                                msg.routeEndFound = true;
+
+                            }
+                        }
+
+                        // SEND MESSAGE TO NEIGHBOURS OR PARENT
 
                         // DatagramChannel dgSendChannel = DatagramChannel.open();
                         // String datagramSendMsg = "Right back at ya!";
