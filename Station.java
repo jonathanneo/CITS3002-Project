@@ -3,8 +3,9 @@ import java.nio.channels.SocketChannel;
 import java.nio.channels.Selector;
 import java.nio.channels.DatagramChannel;
 import java.nio.channels.SelectionKey;
-import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.*;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -19,9 +20,6 @@ import java.util.HashMap;
 import com.google.gson.*;
 import java.text.SimpleDateFormat;
 import java.util.Date;
-import java.nio.file.*;
-import java.sql.JDBCType;
-import java.nio.charset.StandardCharsets;
 import java.net.URLDecoder;
 
 /**
@@ -617,12 +615,54 @@ public class Station {
     }
 
     /**
+     * Checks if the station exists in the earliest trip list in message
+     * 
+     * @param msg
+     * @param station
+     * @return true if it exists, false otherwise.
+     */
+    public static Boolean checkStationInEarliestTrips(Message msg, Station station) {
+        for (List<String> trip : msg.route.get(msg.hopCount).earliestTrips) {
+            if (trip.get(4) == station.stationName) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Find the position in the route list with the specified station name
+     * 
+     * @param route
+     * @param stationName
+     * @return position index
+     */
+    public static int findRoutePosition(List<StationObject> route, String stationName) {
+        for (int index = 0; index < route.size(); index++) {
+            if (route.get(index).stationName == stationName) {
+                return index;
+            }
+        }
+        return -1; // not found
+    }
+
+    public static Long checkAndUpdateTimetable(Station station, String path, Long fileTime) throws Exception {
+        Long modifiedTime = new File(path).lastModified();
+        if (fileTime != modifiedTime) {
+            List<List<String>> timetable = getTimetable(path);
+            // set timetable
+            station.setTimetable(timetable);
+            return modifiedTime;
+        }
+        return fileTime;
+    }
+
+    /**
      * Obtain args and set values for Station
      * 
      * @param args input arguments
      */
     public static List<Object> getArguments(String[] args) {
-
         String stationName = new String();
         String tcpPort = new String();
         String udpPort = new String();
