@@ -45,6 +45,10 @@ public class Station {
     List<Station> neighbours;
     List<List<String>> timetable;
 
+    public Station() {
+        // empty constructor
+    }
+
     /**
      * Constructor for Station
      * 
@@ -790,7 +794,57 @@ public class Station {
         return htmlContent;
     }
 
-    public static void main(String[] args) throws Exception {
+    public Boolean sendUdp(Station station, Message msg, MessageSentLogs messageSentLogs) {
+        Gson gson = new Gson();
+        String msgString = gson.toJson(msg);
+        ByteBuffer datagramSendBuffer = ByteBuffer.wrap(msgString.getBytes());
+        int sentToNeighbours = 0;
+        for (Station neighbour : station.neighbours) {
+            // set send to true initially
+            Boolean send = true;
+            // don't send to stations that are already in message
+            for (StationObject route : msg.route) {
+                if (route.stationUDPAddress.equals(neighbour.getStationUdpAddress())) {
+                    send = false;
+                }
+            }
+            // don't send message to stations that a messageId exists in messageSentLogs
+            for (MessageSentLog log : messageSentLogs.logs) {
+                if (msg.messageId.equals(log.messageId)
+                        && neighbour.getStationUdpAddress().equals(log.destinationStationAddress)) {
+                    send = false;
+                }
+            }
+
+            if (send) {
+                if (msg.hopCount == 0) {
+                    MessageSentLog newLog = new MessageSentLog(msg.route.get(msg.hopCount).messageId, "",
+                            station.getStationUdpAddress(), neighbour.getStationUdpAddress());
+                    messageSentLogs.addLog(newLog);
+                } else {
+                    MessageSentLog newLog = new MessageSentLog(msg.route.get(msg.hopCount).messageId,
+                            msg.route.get(msg.hopCount - 1).stationUDPAddress, station.getStationUdpAddress(),
+                            neighbour.getStationUdpAddress());
+                    messageSentLogs.addLog(newLog);
+                }
+                try {
+                    DatagramChannel dgSendChannel = DatagramChannel.open();
+                    dgSendChannel.send(datagramSendBuffer, new InetSocketAddress(station.server, neighbour.udpPort));
+                    datagramSendBuffer.clear();
+                    dgSendChannel.close();
+                    System.out.println("Msg Sent to neighbour: " + neighbour.getStationUdpAddress());
+                } catch (Exception e) {
+                    // it should never fail
+                }
+            }
+        }
+        if (sentToNeighbours == 0) {
+            return false;
+        }
+        return true;
+    }
+
+    public void startStation(String[] args) throws Exception {
         // check arguments
         checkArguments(args);
         // get arguments
@@ -838,6 +892,10 @@ public class Station {
         datagramChannel.configureBlocking(false);
         datagramChannel.socket().bind(udpServerAddress);
         datagramChannel.register(selector, SelectionKey.OP_READ, station.udpPort);
+
+        // create logs
+        MessageSentLogs messageSentLogs = new MessageSentLogs();
+        MessageBank messageBank = new MessageBank();
 
         // start listening
         while (true) {
@@ -907,19 +965,17 @@ public class Station {
                                         gson.toJson(station.timetable), station.getStationTcpAddress(),
                                         gson.toJson(station.TRIP_TYPE), "true", gson.toJson(earliestTripList), "false");
                                 System.out.println("---- Converted html content ----- ");
+                            } else {
+                                // send UDP to neighbours
+                                Boolean sentToNeighbours = sendUdp(station, msg, messageSentLogs);
                             }
                         } else {
                             System.out.println("RETURN EMPTY PAGE TO CLIENT");
                             Gson gson = new Gson();
                             // send empty page to client
-                            htmlContent = htmlContent.replace("{summarisedTrip}", "");
-                            htmlContent = htmlContent.replace("{station}", station.stationName);
-                            htmlContent = htmlContent.replace("{timetable}", gson.toJson(station.timetable));
-                            htmlContent = htmlContent.replace("{stationTcpAddress}", station.getStationTcpAddress());
-                            htmlContent = htmlContent.replace("{tripTypes}", gson.toJson(station.TRIP_TYPE));
-                            htmlContent = htmlContent.replace("{stationResponse}", "false");
-                            htmlContent = htmlContent.replace("{responses}", gson.toJson(""));
-                            htmlContent = htmlContent.replace("{routeEndFound}", "false");
+                            htmlContent = modifyHtmlContent(htmlContent, "", station.stationName,
+                                    gson.toJson(station.timetable), station.getStationTcpAddress(),
+                                    gson.toJson(station.TRIP_TYPE), "false", gson.toJson(""), "false");
                         }
 
                         // DO STUFF HERE AND SEND RESPONSE BACK TO CLIENT
@@ -951,13 +1007,15 @@ public class Station {
 
                         // DO STUFF WITH DATAGRAM MESSAGE
 
-                        DatagramChannel dgSendChannel = DatagramChannel.open();
-                        String datagramSendMsg = "Right back at ya!";
-                        ByteBuffer datagramSendBuffer = ByteBuffer.wrap(datagramSendMsg.getBytes());
-                        dgSendChannel.send(datagramSendBuffer, new InetSocketAddress(station.server,
-                                Integer.parseInt(remoteAddress.toString().split(":")[1])));
-                        datagramSendBuffer.clear();
-                        dgSendChannel.close();
+                        // SEND MESSAGE
+
+                        // DatagramChannel dgSendChannel = DatagramChannel.open();
+                        // String datagramSendMsg = "Right back at ya!";
+                        // ByteBuffer datagramSendBuffer = ByteBuffer.wrap(datagramSendMsg.getBytes());
+                        // dgSendChannel.send(datagramSendBuffer, new InetSocketAddress(station.server,
+                        // Integer.parseInt(remoteAddress.toString().split(":")[1])));
+                        // datagramSendBuffer.clear();
+                        // dgSendChannel.close();
                         // for (Station neighbour : station.neighbours) {
                         // dgSendChannel.send(datagramSendBuffer,
                         // new InetSocketAddress(station.server, neighbour.udpPort));
@@ -971,5 +1029,10 @@ public class Station {
                 keyIterator.remove();
             }
         }
+    }
+
+    public static void main(String[] args) throws Exception {
+        Station station = new Station();
+        station.startStation(args);
     }
 }
