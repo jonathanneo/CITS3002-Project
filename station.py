@@ -196,6 +196,7 @@ html_content = """
         <title>Transperth Journey Planner</title>
         <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
         <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css" integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh" crossorigin="anonymous">
+        <link rel="icon" href="data:,">
     </head>
     <body>
         <div class="container">
@@ -472,6 +473,7 @@ def getSummarisedTrip(msg):
     sourceName = msg["sourceName"]
     destinationName = msg["destinationName"]
     sourceTrip = msg["route"][0]["earliestTrips"][0]
+    print(f"sourceTrip: {sourceTrip}")
     destinationTrip = msg["route"][-1]["earliestTrips"][0]
     summarisedTrip = f"Depart from {sourceName} ({sourceTrip[3]}) at {sourceTrip[1]} taking {sourceTrip[2]} and eventually arrive at {destinationName} at {destinationTrip[4]}. View trip details below."
     print(f"summarised trip: {summarisedTrip}")
@@ -500,15 +502,20 @@ def serviceTcpConnection(key, mask, sel, station, udpServerSocket, messageSentLo
                     f"StationName: {station.stationName} || Message ID: {messageId}")
                 # get message to send and append station to message route and set hopCount to 0
                 msg = getMessageToSend(requestObject, station, messageId)
+                print(f"initial message: {msg}")
                 clientRequestLog = ClientRequestLog(
                     msg, sock, sel, data)
                 clientRequestLogs.addLog(clientRequestLog)
                 destFound, earliestTrip = findDestination(station, msg)
+                print(f"find dest message: {msg}")
                 if destFound:
                     # if destination is found, then send message back to client
                     msg = matchRoute(msg)
+                    print(f"match route msg: {msg}")
                     earliestTrip.insert(0, station.stationName)
+                    print(f"earliest trip msg: {msg}")
                     summarisedTrip = getSummarisedTrip(msg)
+                    print(f"summarised trip: {summarisedTrip}")
                     request = sendResponseToClient(
                         station, data, [earliestTrip], sock, sel, "true", False, summarisedTrip)
                     clientRequestLogs.removeLog(msg)

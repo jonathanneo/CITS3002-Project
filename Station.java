@@ -88,27 +88,39 @@ public class Station {
         List<List<String>> earliestTrips = new ArrayList<List<String>>();
         try {
             for (List<String> timetableRecord : this.timetable) {
-                Date timeValue = new SimpleDateFormat("HH:mm").parse(time);
-                Date timetableRecordTime = new SimpleDateFormat("HH:mm").parse(timetableRecord.get(0));
+                Date timeValue = new SimpleDateFormat("hh:mm").parse(time);
+                Date timetableRecordTime = new SimpleDateFormat("hh:mm").parse(timetableRecord.get(0));
+
                 String timetableRecordDestination = timetableRecord.get(4);
                 // first trip
                 if (earliestTrips.size() == 0) {
                     if (timetableRecordTime.compareTo(timeValue) >= 0) {
+                        // System.out.println("initial size of 0");
                         earliestTrips.add(timetableRecord);
                     }
                 } else {
                     Boolean recordFound = false;
                     for (List<String> trips : earliestTrips) {
-                        if (timetableRecordTime.compareTo(timeValue) >= 0
-                                && trips.get(4) == timetableRecordDestination) {
+                        // if already in earliestTrips then do not add
+                        // System.out
+                        // .println("timetableRecordTime: " + timetableRecordTime + " || timeValue: " +
+                        // timeValue);
+                        // System.out.println("timetableRecordTime greater or equal to zero?"
+                        // + (timetableRecordTime.compareTo(timeValue) >= 0));
+                        if ((timetableRecordTime.compareTo(timeValue) >= 0)
+                                && (trips.get(4).equals(timetableRecordDestination))) {
                             recordFound = true;
+                            break;
                         }
                     }
+                    // if not yet in earliestTrips, then add
                     if (recordFound == false) {
                         earliestTrips.add(timetableRecord);
                     }
                 }
             }
+            Gson gson = new Gson();
+            System.out.println("EarliestTrips: " + gson.toJson(earliestTrips));
             return earliestTrips;
         } catch (Exception e) {
             throw new Exception("Could not parse time correctly. Full error message: " + e);
@@ -222,8 +234,9 @@ public class Station {
          */
         public MessageSentLog removeLog(String parentAddress, String destinationStationAddress, String messageId) {
             for (MessageSentLog log : this.logs) {
-                if (log.parentAddress == parentAddress && log.destinationStationAddress == destinationStationAddress
-                        && log.messageId == messageId) {
+                if (log.parentAddress.equals(parentAddress)
+                        && log.destinationStationAddress.equals(destinationStationAddress)
+                        && log.messageId.equals(messageId)) {
                     this.logs.remove(log);
                     return log;
                 }
@@ -241,7 +254,7 @@ public class Station {
             List<MessageSentLog> foundLog = new ArrayList<MessageSentLog>();
 
             for (MessageSentLog log : this.logs) {
-                if (log.messageId == messageId) {
+                if (log.messageId.equals(messageId)) {
                     foundLog.add(log);
                 }
             }
@@ -287,6 +300,7 @@ public class Station {
             this.time = time;
             this.messageId = messageId;
             this.routeEndFound = false; // no dead end found
+            this.messageType = messageType;
         }
 
         /**
@@ -324,7 +338,7 @@ public class Station {
                     List<StationObject> route = (List<StationObject>) message.route;
                     StationObject bankStation = (StationObject) route.get(hopCount);
                     String bankMessageId = (String) bankStation.messageId;
-                    if (bankMessageId == messageId) {
+                    if (bankMessageId.equals(messageId)) {
                         removedMessages.add(message);
                     }
                 } catch (Exception e) {
@@ -345,12 +359,18 @@ public class Station {
      * @param requestArray
      * @return
      */
-    public static String getRequestBody(List<String> requestArray) {
-        String requestString = (String) requestArray.get(0);
-        String[] requestStringList = requestString.split(" ");
-        requestString = requestStringList[1];
-        requestString = requestString.replace("/?", "");
-        return requestString;
+    public static String getRequestBody(String request) {
+        try {
+            List<String> requestArray = Arrays.asList(request.split("\r\n"));
+            String requestString = requestArray.get(0);
+            String[] requestStringList = requestString.split(" ");
+            requestString = requestStringList[1];
+            requestString = requestString.replace("/?", "");
+            return requestString;
+        } catch (Exception e) {
+            // do nothing
+        }
+        return new String();
     }
 
     /**
@@ -387,13 +407,13 @@ public class Station {
             if (index + 1 < numRoutes) {
                 for (List<String> trip : earliestTrips) {
                     StationObject nextRoute = (StationObject) routes.get(index + 1);
-                    if (trip.get(4) != nextRoute.stationName) {
+                    if (!trip.get(4).equals(nextRoute.stationName)) {
                         removeTrip.add(trip);
                     }
                 }
             } else {
                 for (List<String> trip : earliestTrips) {
-                    if (trip.get(4) != msg.destinationName) {
+                    if (!trip.get(4).equals(msg.destinationName)) {
                         removeTrip.add(trip);
                     }
                 }
@@ -401,6 +421,18 @@ public class Station {
             for (List<String> trip : removeTrip) {
                 earliestTrips.remove(trip);
             }
+        }
+        return msg;
+    }
+
+    public static Message addRouteStationToTripDetails(Message msg) {
+        for (StationObject route : msg.route) {
+            List<List<String>> tempList = new ArrayList<List<String>>(route.earliestTrips);
+            List<String> tempTempList = new ArrayList<String>(tempList.get(0));
+            tempTempList.add(0, route.stationName);
+            List<List<String>> emptyList = new ArrayList<List<String>>();
+            emptyList.add(tempTempList);
+            route.earliestTrips = emptyList;
         }
         return msg;
     }
@@ -436,14 +468,15 @@ public class Station {
                 tripType = (String) item.get("tripType");
             }
         }
-        if (time == "") {
+        if (time.equals("")) {
             Date date = new Date();
             SimpleDateFormat formatter = new SimpleDateFormat("HH:mm");
             time = formatter.format(date);
         }
-        if (tripType == "") {
+        if (tripType.equals("")) {
             tripType = "FastestTrip";
         }
+        System.out.println(">>>>>>>>> Time: " + time);
         Message message = new Message(station.stationName, destination, tripType, time, messageId, messageType);
         message.addRoute(station);
         return message;
@@ -462,7 +495,7 @@ public class Station {
         List<StationObject> routes = msg.route;
         StationObject route = routes.get(msg.hopCount);
         for (List<String> trip : route.earliestTrips) {
-            if (trip.get(4) == destinationName) {
+            if (trip.get(4).equals(destinationName)) {
                 returnList.add(true);
                 returnList.add(trip);
             }
@@ -475,11 +508,14 @@ public class Station {
     public static String getSummarisedTrip(Message msg) {
         String sourceName = msg.sourceName;
         String destinationName = msg.destinationName;
+        Gson gson = new Gson();
+
         List<String> sourceTrip = msg.route.get(0).earliestTrips.get(0);
+        System.out.println("sourceTrip: " + gson.toJson(sourceTrip));
         List<String> destinationTrip = msg.route.get(msg.route.size() - 1).earliestTrips.get(0);
-        String summarisedTrip = "Depart from " + sourceName + " (" + sourceTrip.get(3) + ") taking " + sourceTrip.get(2)
-                + " and eventually arrive at " + destinationName + " at " + destinationTrip.get(4)
-                + ". View trip details below.";
+        String summarisedTrip = "Depart from " + sourceName + " (" + sourceTrip.get(3) + ") at " + sourceTrip.get(1)
+                + " taking " + sourceTrip.get(2) + " and eventually arrive at " + destinationName + " at "
+                + destinationTrip.get(4) + ". View trip details below.";
         return summarisedTrip;
     }
 
@@ -488,7 +524,7 @@ public class Station {
         String destination = message.destinationName;
         List<List<String>> earliestTrips = message.route.get(message.hopCount).earliestTrips;
         for (List<String> trip : earliestTrips) {
-            if (trip.get(4) == destination) {
+            if (trip.get(4).equals(destination)) {
                 newEarliestTrips.add(trip);
             }
         }
@@ -508,7 +544,7 @@ public class Station {
     public static Message addStationToRoute(Message message, Station station, String messageId) throws Exception {
         String lastRouteTime = "";
         for (List<String> trip : message.route.get(message.hopCount).earliestTrips) {
-            if (trip.get(4) == station.stationName) {
+            if (trip.get(4).equals(station.stationName)) {
                 lastRouteTime = trip.get(3);
             }
         }
@@ -526,10 +562,11 @@ public class Station {
         String destinationName = msg.destinationName;
         String earliestTime = "";
 
-        if (tripType == "FastestTrip") {
+        if (tripType.equals("FastestTrip")) {
             for (Message message : messageBank.bank) {
                 try {
-                    if (message.routeEndFound == false && message.route.get(message.hopCount).messageId == messageId) {
+                    if (message.routeEndFound == false
+                            && message.route.get(message.hopCount).messageId.equals(messageId)) {
                         earliestTime = message.route.get(message.route.size() - 1).earliestTrips.get(0).get(4);
                         earliestMessage = message;
                         break;
@@ -543,7 +580,7 @@ public class Station {
                 try {
                     if (message.routeEndFound == false
                             && message.route.get(message.route.size() - 1).earliestTrips.size() > 0
-                            && message.route.get(message.hopCount).messageId == messageId) {
+                            && message.route.get(message.hopCount).messageId.equals(messageId)) {
                         String compareEarliestTime = message.route.get(message.route.size() - 1).earliestTrips.get(0)
                                 .get(4);
                         Date dteCompareEarliestTime = new SimpleDateFormat("HH:mm").parse(compareEarliestTime);
@@ -579,7 +616,7 @@ public class Station {
         int visited = 0;
         for (List<String> trip : msg.route.get(msg.hopCount).earliestTrips) {
             for (StationObject route : msg.route) {
-                if (trip.get(4) == route.stationName) {
+                if (trip.get(4).equals(route.stationName)) {
                     visited++;
                 }
             }
@@ -605,7 +642,7 @@ public class Station {
         for (Station neighbour : station.neighbours) {
             Boolean visit = false;
             for (StationObject route : routes) {
-                if (route.stationUDPAddress == neighbour.getStationUdpAddress()) {
+                if (route.stationUDPAddress.equals(neighbour.getStationUdpAddress())) {
                     visit = true;
                     break;
                 }
@@ -631,7 +668,7 @@ public class Station {
      */
     public static Boolean checkStationInEarliestTrips(Message msg, Station station) {
         for (List<String> trip : msg.route.get(msg.hopCount).earliestTrips) {
-            if (trip.get(4) == station.stationName) {
+            if (trip.get(4).equals(station.stationName)) {
                 return true;
             }
         }
@@ -647,7 +684,7 @@ public class Station {
      */
     public static int findRoutePosition(List<StationObject> route, String stationName) {
         for (int index = 0; index < route.size(); index++) {
-            if (route.get(index).stationName == stationName) {
+            if (route.get(index).stationName.equals(stationName)) {
                 return index;
             }
         }
@@ -739,6 +776,20 @@ public class Station {
         }
     }
 
+    public static String modifyHtmlContent(String htmlContent, String summarisedTrip, String station, String timetable,
+            String stationTcpAddress, String tripTypes, String stationResponse, String responses,
+            String routeEndFound) {
+        htmlContent = htmlContent.replace("{summarisedTrip}", summarisedTrip);
+        htmlContent = htmlContent.replace("{station}", station);
+        htmlContent = htmlContent.replace("{timetable}", timetable);
+        htmlContent = htmlContent.replace("{stationTcpAddress}", stationTcpAddress);
+        htmlContent = htmlContent.replace("{tripTypes}", tripTypes);
+        htmlContent = htmlContent.replace("{stationResponse}", stationResponse);
+        htmlContent = htmlContent.replace("{responses}", responses);
+        htmlContent = htmlContent.replace("{routeEndFound}", routeEndFound);
+        return htmlContent;
+    }
+
     public static void main(String[] args) throws Exception {
         // check arguments
         checkArguments(args);
@@ -764,9 +815,7 @@ public class Station {
         Long fileTime = new File(path).lastModified();
         String htmlPathString = System.getProperty("user.dir") + "/station.html";
         Path htmlPath = Paths.get(htmlPathString);
-        // String htmlContent = getHtmlContent(htmlPath, station.format);
-        String htmlContent = Files.readString(htmlPath, StandardCharsets.US_ASCII);
-        System.out.println("HTML Content" + htmlContent);
+        String htmlTemplate = Files.readString(htmlPath, StandardCharsets.US_ASCII);
 
         // create and open the selector
         Selector selector = Selector.open();
@@ -816,7 +865,8 @@ public class Station {
                 }
                 // readable
                 if (key.isReadable()) {
-
+                    String htmlContent = new String();
+                    htmlContent = htmlTemplate;
                     if ((int) key.attachment() == station.tcpPort) {
                         // obtain the socket channel from the selector key
                         SocketChannel socketChannel = (SocketChannel) key.channel();
@@ -826,16 +876,40 @@ public class Station {
                         // store contents from buffer into a string
                         String requestBody = new String(buffer.array()).trim();
                         System.out.println("Message received: " + requestBody);
+                        requestBody = getRequestBody(requestBody);
                         if (requestBody.indexOf("to") != -1) {
                             // contains message
                             List<HashMap<String, String>> requestMap = getRequestObject(requestBody);
+                            System.out.println("Request Map : " + requestMap);
                             String messageId = UUID.randomUUID().toString();
                             System.out.println("Message received. Generate message ID: " + messageId);
                             Message msg = station.getMessageToSend(requestMap, station, messageId);
+                            Gson testGson = new Gson();
+                            System.out.println("msg: " + testGson.toJson(msg) + "\n");
                             List<Object> findDestResult = findDestination(station, msg);
                             Boolean destFound = (Boolean) findDestResult.get(0);
-                            List<StationObject> earliestTrip = (List<StationObject>) findDestResult.get(1);
+                            List<String> earliestTrip = (List<String>) findDestResult.get(1);
+                            System.out.println("Destination found: " + destFound);
+                            System.out.println("earliestTrip found: " + earliestTrip);
+                            if (destFound) {
+                                msg = matchRoute(msg);
+                                msg = addRouteStationToTripDetails(msg);
+                                System.out.println("Match route: " + testGson.toJson(msg));
+                                List<String> newEarliestTrip = new ArrayList<String>(earliestTrip);
+                                newEarliestTrip.add(0, station.stationName);
+                                List<List<String>> earliestTripList = new ArrayList<List<String>>();
+                                earliestTripList.add(newEarliestTrip);
+                                System.out.println("Added station name to the front." + earliestTripList);
+                                String summarisedTrip = getSummarisedTrip(msg);
+                                System.out.println("summarisedTrip: " + summarisedTrip);
+                                Gson gson = new Gson();
+                                htmlContent = modifyHtmlContent(htmlContent, summarisedTrip, station.stationName,
+                                        gson.toJson(station.timetable), station.getStationTcpAddress(),
+                                        gson.toJson(station.TRIP_TYPE), "true", gson.toJson(earliestTripList), "false");
+                                System.out.println("---- Converted html content ----- ");
+                            }
                         } else {
+                            System.out.println("RETURN EMPTY PAGE TO CLIENT");
                             Gson gson = new Gson();
                             // send empty page to client
                             htmlContent = htmlContent.replace("{summarisedTrip}", "");
@@ -846,7 +920,6 @@ public class Station {
                             htmlContent = htmlContent.replace("{stationResponse}", "false");
                             htmlContent = htmlContent.replace("{responses}", gson.toJson(""));
                             htmlContent = htmlContent.replace("{routeEndFound}", "false");
-                            System.out.println("html content: " + htmlContent);
                         }
 
                         // DO STUFF HERE AND SEND RESPONSE BACK TO CLIENT
