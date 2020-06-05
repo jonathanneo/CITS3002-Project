@@ -379,11 +379,11 @@ public class Station {
      * @return msg containing earliest trips that aren't duplicates
      */
     public static Message matchRoute(Message msg) {
-        List<StationObject> routes = (List<StationObject>) msg.route;
+        List<StationObject> routes = msg.route;
         int numRoutes = routes.size();
         for (int index = 0; index < numRoutes; index++) {
-            StationObject route = (StationObject) routes.get(index);
-            List<List<String>> earliestTrips = (List<List<String>>) route.earliestTrips;
+            StationObject route = routes.get(index);
+            List<List<String>> earliestTrips = route.earliestTrips;
             List<List<String>> removeTrip = new ArrayList<List<String>>();
             if (index + 1 < numRoutes) {
                 for (List<String> trip : earliestTrips) {
@@ -448,6 +448,22 @@ public class Station {
         Message message = new Message(station.stationName, destination, tripType, time, messageId, messageType);
         message.addRoute(station);
         return message;
+    }
+
+    public static List<Object> findDestination(Station station, Message msg) {
+        List<Object> returnList = new ArrayList<Object>();
+        String destinationName = msg.destinationName;
+        List<StationObject> routes = msg.route;
+        StationObject route = routes.get(msg.hopCount);
+        for (List<String> trip : route.earliestTrips) {
+            if (trip.get(4) == destinationName) {
+                returnList.add(true);
+                returnList.add(trip);
+            }
+        }
+        returnList.add(false);
+        returnList.add(new ArrayList());
+        return returnList;
     }
 
     /**
