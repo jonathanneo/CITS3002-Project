@@ -16,10 +16,6 @@ import java.net.Socket;
 import java.util.Iterator;
 import java.util.Set;
 import java.util.HashMap;
-import org.json.simple.JSONObject;
-import org.json.simple.JSONArray;
-import org.json.simple.parser.ParseException;
-import org.json.simple.parser.JSONParser;
 import com.google.gson.*;
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -298,7 +294,7 @@ public class Station {
          * Gets the stationJsonObject based on the station object and adds to route
          * 
          * @param station
-         * @exception time cannot be casted to date
+         * @throws Exception when time cannot be casted to date
          */
         public void addRoute(Station station) throws Exception {
             StationObject stationObject = station.getStationObject(this.messageId, this.time);
@@ -410,43 +406,49 @@ public class Station {
         return msg;
     }
 
-    // public static Message getMessageToSend(List<JSONObject> requestObject,
-    // Station station, String messageId) {
-    // String destination = "";
-    // String time = "";
-    // String tripType = "";
-    // String messageType = "outgoing";
-    // for (JSONObject item : requestObject) {
-    // if (item.get("to") != null) {
-    // destination = (String) item.get("to");
-    // }
-    // if (item.get("time") != null) {
-    // time = (String) item.get("time");
-    // // decode time
-    // try {
-    // time = java.net.URLDecoder.decode(time, StandardCharsets.UTF_8.name());
-    // } catch (UnsupportedEncodingException e) {
-    // // not going to happen - value came from JDK's own StandardCharsets
-    // }
-    // }
-    // if (item.get("tripType") != null) {
-    // tripType = (String) item.get("tripType");
-    // }
-    // }
-    // if (time == "") {
-    // Date date = new Date();
-    // SimpleDateFormat formatter = new SimpleDateFormat("HH:mm");
-    // time = formatter.format(date);
-    // }
-    // if (tripType == "") {
-    // tripType = "FastestTrip";
-    // }
-    // // Message message = Message(station.stationName, destination, tripType,
-    // time,
-    // // messageId, messageType);
-    // // message =
-    // return new Message();
-    // }
+    /**
+     * 
+     * @param requestObject
+     * @param station
+     * @param messageId
+     * @return
+     * @throws Exception when time cannot be casted
+     */
+    public Message getMessageToSend(List<HashMap<String, String>> requestObject, Station station, String messageId)
+            throws Exception {
+        String destination = "";
+        String time = "";
+        String tripType = "";
+        String messageType = "outgoing";
+        for (HashMap<String, String> item : requestObject) {
+            if (item.get("to") != null) {
+                destination = (String) item.get("to");
+            }
+            if (item.get("time") != null) {
+                time = (String) item.get("time");
+                // decode time
+                try {
+                    time = java.net.URLDecoder.decode(time, StandardCharsets.UTF_8.name());
+                } catch (UnsupportedEncodingException e) {
+                    // not going to happen - value came from JDK's own StandardCharsets
+                }
+            }
+            if (item.get("tripType") != null) {
+                tripType = (String) item.get("tripType");
+            }
+        }
+        if (time == "") {
+            Date date = new Date();
+            SimpleDateFormat formatter = new SimpleDateFormat("HH:mm");
+            time = formatter.format(date);
+        }
+        if (tripType == "") {
+            tripType = "FastestTrip";
+        }
+        Message message = new Message(station.stationName, destination, tripType, time, messageId, messageType);
+        message.addRoute(station);
+        return message;
+    }
 
     /**
      * Obtain args and set values for Station
