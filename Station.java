@@ -1106,6 +1106,24 @@ public class Station {
                                     }
                                     socketChannel.close();
                                 }
+                            } else {
+                                // NOT YET AT SOURCE - CHECK IF CAN COLLATE AND SEND BACK TO PARENT
+                                messageBank.addMessage(msg);
+                                String destinationStationAddress = "http:/" + remoteAddress;
+                                String removeMessageId = msg.route.get(msg.hopCount).messageId;
+                                String parentAddress = msg.route.get(msg.hopCount - 1).stationUDPAddress;
+                                MessageSentLog removedLog = messageSentLogs.removeLog(parentAddress,
+                                        destinationStationAddress, removeMessageId);
+                                if (messageSentLogs.getLogs(removedLog.messageId) == null) {
+                                    // No more logs left for this messageId
+                                    // collate results and send back to parent
+                                    Message collatedMessage = collateMessages(msg, messageBank);
+                                    collatedMessage = matchRoute(collatedMessage);
+                                    // -1 hopCount because we want to
+                                    // decrement the hopCount as we
+                                    // return back to source
+                                    sendUdpToParent(station, msg, 1, datagramChannel);
+                                }
                             }
 
                         } else {
@@ -1127,42 +1145,38 @@ public class Station {
                                     List<String> earliestTrip = (List<String>) findDestResult.get(1);
                                     System.out.println("Destination found: " + destFound);
                                     System.out.println("earliestTrip found: " + earliestTrip);
-                                    if (destFound) {
-                                        // DESTINATION FOUND
-                                        // Check if dead end is found
-                                        Boolean routeEndFound = routeEnd(station, msg);
-                                        if (destFound == true && routeEndFound == true) {
-                                            // DEAD END FOUND
+                                    Boolean routeEndFound = routeEnd(station, msg);
+                                    if (destFound == true && routeEndFound == true) {
+                                        // DEAD END FOUND
+                                        msg.routeEndFound = true;
+                                        // let parent know that a deadend is found
+                                        sendUdpToParent(station, msg, 1, datagramChannel);
+                                    }
+                                    if (destFound == true && routeEndFound == false) {
+                                        // DESTINATION FOUND AND NOT A DEAD END
+                                        // SEND MESSAGE BACK TO PARENT
+                                        System.out.println("Removing non destination");
+                                        msg = removeNonDestination(msg, station);
+                                        System.out.println("Sending to parent non destination");
+                                        sendUdpToParent(station, msg, 1, datagramChannel);
+                                    }
+                                    if (destFound == false && routeEndFound == false) {
+                                        // SEND MESSAGE TO NEIGHBOURS
+                                        Boolean sentToNeighbours = sendUdp(station, msg, messageSentLogs,
+                                                datagramChannel);
+                                        if (!sentToNeighbours) {
+                                            // failed to send to neighbours as dead end is found
+                                            // set route end to true
                                             msg.routeEndFound = true;
-                                            // let parent know that a deadend is found
+                                            // send to parent instead
                                             sendUdpToParent(station, msg, 1, datagramChannel);
                                         }
-                                        if (destFound == true && routeEndFound == false) {
-                                            // DESTINATION FOUND AND NOT A DEAD END
-                                            // SEND MESSAGE BACK TO PARENT
-                                            System.out.println("Removing non destination");
-                                            msg = removeNonDestination(msg, station);
-                                            System.out.println("Sending to parent non destination");
-                                            sendUdpToParent(station, msg, 1, datagramChannel);
-                                        }
-                                        if (destFound == false && routeEndFound == false) {
-                                            // SEND MESSAGE TO NEIGHBOURS
-                                            Boolean sentToNeighbours = sendUdp(station, msg, messageSentLogs,
-                                                    datagramChannel);
-                                            if (!sentToNeighbours) {
-                                                // failed to send to neighbours as dead end is found
-                                                // set route end to true
-                                                msg.routeEndFound = true;
-                                                // send to parent instead
-                                                sendUdpToParent(station, msg, 1, datagramChannel);
-                                            }
-                                        }
-                                        if (destFound == false && routeEndFound == true) {
-                                            // DEAD END IS FOUND AND DEST NOT FOUND
-                                            msg.routeEndFound = true;
-                                            // SEND BACK TO PARENT
-                                            sendUdpToParent(station, msg, 1, datagramChannel);
-                                        }
+                                    }
+                                    if (destFound == false && routeEndFound == true) {
+                                        // DEAD END IS FOUND AND DEST NOT FOUND
+                                        msg.routeEndFound = true;
+                                        // SEND BACK TO PARENT
+                                        sendUdpToParent(station, msg, 1, datagramChannel);
                                     }
                                 } else {
                                     // NOT INTENDED FOR ME
@@ -1173,23 +1187,6 @@ public class Station {
                                 }
                             }
                         }
-
-                        // SEND MESSAGE TO NEIGHBOURS OR PARENT
-
-                        // DatagramChannel dgSendChannel = DatagramChannel.open();
-                        // String datagramSendMsg = "Right back at ya!";
-                        // ByteBuffer datagramSendBuffer = ByteBuffer.wrap(datagramSendMsg.getBytes());
-                        // dgSendChannel.send(datagramSendBuffer, new InetSocketAddress(station.server,
-                        // Integer.parseInt(remoteAddress.toString().split(":")[1])));
-                        // datagramSendBuffer.clear();
-                        // dgSendChannel.close();
-                        // for (Station neighbour : station.neighbours) {
-                        // dgSendChannel.send(datagramSendBuffer,
-                        // new InetSocketAddress(station.server, neighbour.udpPort));
-                        // datagramSendBuffer.clear();
-                        // dgSendChannel.close();
-                        // }
-
                     }
                 }
                 // remove the key iterator when done using it
