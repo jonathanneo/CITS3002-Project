@@ -92,33 +92,39 @@ public class Station {
         List<List<String>> earliestTrips = new ArrayList<List<String>>();
         try {
             for (List<String> timetableRecord : this.timetable) {
-                Date timeValue = new SimpleDateFormat("hh:mm").parse(time);
-                Date timetableRecordTime = new SimpleDateFormat("hh:mm").parse(timetableRecord.get(0));
+                Date timeValue = new SimpleDateFormat("HH:mm").parse(time);
+                Date timetableRecordTime = new SimpleDateFormat("HH:mm").parse(timetableRecord.get(0));
 
                 String timetableRecordDestination = timetableRecord.get(4);
                 // first trip
                 if (earliestTrips.size() == 0) {
                     if (timetableRecordTime.compareTo(timeValue) >= 0) {
-                        // System.out.println("initial size of 0");
+                        System.out.println("initial size of 0");
+                        System.out.println("Added timetableRecord: " + timetableRecord);
                         earliestTrips.add(timetableRecord);
+                        System.out.println("earliestTrips List: " + earliestTrips);
                     }
                 } else {
                     Boolean recordFound = false;
                     for (List<String> trips : earliestTrips) {
                         // if already in earliestTrips then do not add
-                        // System.out
-                        // .println("timetableRecordTime: " + timetableRecordTime + " || timeValue: " +
-                        // timeValue);
-                        // System.out.println("timetableRecordTime greater or equal to zero?"
-                        // + (timetableRecordTime.compareTo(timeValue) >= 0));
+                        System.out
+                                .println("timetableRecordTime: " + timetableRecordTime + " || timeValue: " + timeValue);
+                        System.out.println("timetableRecordTime greater or equal to zero?"
+                                + (timetableRecordTime.compareTo(timeValue) >= 0));
+                        System.out.println("trips station: " + trips.get(4) + " || timetableRecordDestination: "
+                                + timetableRecordDestination);
+                        System.out.println("trips station match?: " + trips.get(4).equals(timetableRecordDestination));
                         if ((timetableRecordTime.compareTo(timeValue) >= 0)
                                 && (trips.get(4).equals(timetableRecordDestination))) {
                             recordFound = true;
+                            System.out.println("Do not add!");
                             break;
                         }
                     }
                     // if not yet in earliestTrips, then add
                     if (recordFound == false) {
+                        System.out.println("Adding: " + timetableRecord);
                         earliestTrips.add(timetableRecord);
                     }
                 }
@@ -173,18 +179,23 @@ public class Station {
     }
 
     /**
-     * Subclass for ClientRequestLog which is used to store requests from the client
+     * Subclass for ClientRequestLog which is used to stores the socket channel used
+     * for communication with the client
      */
     public class ClientRequestLog {
-        // TODO: update if needed
-    }
+        SocketChannel socketChannel;
 
-    /**
-     * Subclass for ClientRequestLogs which is used to store a list of requests from
-     * the client
-     */
-    public class ClientRequestLogs {
-        // TODO: update if needed
+        public ClientRequestLog() {
+            // empty constructor
+        }
+
+        public void setSocketChannel(SocketChannel socketChannel) {
+            this.socketChannel = socketChannel;
+        }
+
+        public SocketChannel getSocketChannel() {
+            return this.socketChannel;
+        }
     }
 
     /**
@@ -238,6 +249,14 @@ public class Station {
          */
         public MessageSentLog removeLog(String parentAddress, String destinationStationAddress, String messageId) {
             for (MessageSentLog log : this.logs) {
+
+                System.out.println("parentAddress: " + parentAddress);
+                System.out.println("destinationStationAddress: " + destinationStationAddress);
+                System.out.println("messageId: " + messageId);
+                System.out.println("log.parentAddress: " + log.parentAddress);
+                System.out.println("log.destinationStationAddress: " + log.destinationStationAddress);
+                System.out.println("log.messageId: " + log.messageId);
+
                 if (log.parentAddress.equals(parentAddress)
                         && log.destinationStationAddress.equals(destinationStationAddress)
                         && log.messageId.equals(messageId)) {
@@ -794,7 +813,8 @@ public class Station {
         return htmlContent;
     }
 
-    public void sendUdpToParent(Station station, Message msg, int hopCountDeduct) {
+    public void sendUdpToParent(Station station, Message msg, int hopCountDeduct, DatagramChannel datagramChannel)
+            throws Exception {
         msg.messageType = "incoming";
         msg.hopCount = msg.hopCount - hopCountDeduct;
         Gson gson = new Gson();
@@ -806,18 +826,18 @@ public class Station {
         ByteBuffer datagramSendBuffer = ByteBuffer.wrap(msgString.getBytes());
 
         try {
-            DatagramChannel dgSendChannel = DatagramChannel.open();
-            dgSendChannel.configureBlocking(false);
-            dgSendChannel.send(datagramSendBuffer, new InetSocketAddress(parentHost, Integer.parseInt(parentPort)));
-            System.out.println("Msg sent to parent: " + parentUdpAddress);
+            System.out.println("Sending message to parent: " + parentHost + ":" + parentPort);
+            datagramChannel.send(datagramSendBuffer, new InetSocketAddress(parentHost, Integer.parseInt(parentPort)));
+            System.out.println("Msg sent to parent: " + parentHost + ":" + parentPort);
             datagramSendBuffer.clear();
-            dgSendChannel.close();
         } catch (Exception e) {
             // do nothing
+            throw e;
         }
     }
 
-    public Boolean sendUdp(Station station, Message msg, MessageSentLogs messageSentLogs) throws IOException {
+    public Boolean sendUdp(Station station, Message msg, MessageSentLogs messageSentLogs,
+            DatagramChannel datagramChannel) {
         Gson gson = new Gson();
         String msgString = gson.toJson(msg);
         ByteBuffer datagramSendBuffer = ByteBuffer.wrap(msgString.getBytes());
@@ -851,15 +871,10 @@ public class Station {
                     messageSentLogs.addLog(newLog);
                 }
                 try {
-                    DatagramChannel dgSendChannel = DatagramChannel.open();
-
-                    dgSendChannel.configureBlocking(false);
-                    dgSendChannel.send(datagramSendBuffer, new InetSocketAddress(station.server, neighbour.udpPort));
+                    datagramChannel.send(datagramSendBuffer, new InetSocketAddress(station.server, neighbour.udpPort));
                     datagramSendBuffer.clear();
-                    dgSendChannel.close();
                     System.out.println("Msg Sent to neighbour: " + neighbour.getStationUdpAddress());
                     sentToNeighbours++;
-
                 } catch (Exception e) {
                     // nothing
                 }
@@ -931,10 +946,11 @@ public class Station {
         // create logs
         MessageSentLogs messageSentLogs = new MessageSentLogs();
         MessageBank messageBank = new MessageBank();
+        ClientRequestLog clientRequestLog = new ClientRequestLog();
 
         // start listening
         while (true) {
-            System.out.println("Sever has started: " + tcpServerAddress);
+            // System.out.println("Sever has started: " + tcpServerAddress);
             selector.select();
             System.out.println("Selector: " + selector);
             Set<SelectionKey> selectedKeys = selector.selectedKeys();
@@ -989,11 +1005,6 @@ public class Station {
                                 msg = addRouteStationToTripDetails(msg);
                                 List<List<String>> earliestTripsList = collateEarliestTrips(msg);
                                 System.out.println("Match route: " + testGson.toJson(msg));
-                                // List<String> newEarliestTrip = new ArrayList<String>(earliestTrip);
-                                // newEarliestTrip.add(0, station.stationName);
-                                // List<List<String>> earliestTripList = new ArrayList<List<String>>();
-                                // earliestTripList.add(newEarliestTrip);
-                                // System.out.println("Added station name to the front." + earliestTripList);
                                 String summarisedTrip = getSummarisedTrip(msg);
                                 System.out.println("summarisedTrip: " + summarisedTrip);
                                 Gson gson = new Gson();
@@ -1014,9 +1025,9 @@ public class Station {
                                 socketChannel.close();
                             } else {
                                 // send UDP to neighbours
-                                Boolean sentToNeighbours = sendUdp(station, msg, messageSentLogs);
-
+                                Boolean sentToNeighbours = sendUdp(station, msg, messageSentLogs, datagramChannel);
                                 // Store client request and socket channel in log (single log)
+                                clientRequestLog.setSocketChannel(socketChannel);
                             }
                         } else {
                             System.out.println("RETURN EMPTY PAGE TO CLIENT");
@@ -1040,7 +1051,9 @@ public class Station {
                         // Receive message
                         DatagramChannel dgChannel = (DatagramChannel) key.channel();
                         ByteBuffer datagramBuffer = ByteBuffer.allocate(station.messageSize);
-                        SocketAddress remoteAddress = dgChannel.receive(datagramBuffer);
+                        InetSocketAddress remoteAddress = (InetSocketAddress) dgChannel.receive(datagramBuffer); // SocketAddress
+                        // remoteAddress =
+                        // SocketAddress remoteAddress = dgChannel.getRemoteAddress();
                         datagramBuffer.flip();
                         int limits = datagramBuffer.limit();
                         byte bytes[] = new byte[limits];
@@ -1048,46 +1061,50 @@ public class Station {
                         String msgString = new String(bytes);
                         Gson gson = new Gson();
                         Message msg = gson.fromJson(msgString, Message.class);
-                        System.out.println(
-                                "Client at: " + remoteAddress + " ||  sent message: " + gson.toJson(msg.route));
-                        dgChannel.close();
+                        System.out.println("Client at: " + remoteAddress + " ||  sent message: " + gson.toJson(msg));
+                        // dgChannel.close();
 
                         // INCOMING MESSAGE
                         if (msg.messageType.equals("incoming")) {
                             // Receive message
-                            System.out.println(
-                                    "Client at: " + remoteAddress + " ||  sent message: " + gson.toJson(msg.route));
-                            dgChannel.close();
-
-                            // INCOMING MESSAGE
-                            if (msg.messageType.equals("incoming")) {
-                                if (msg.sourceName.equals(station.stationName)) {
-                                    // ARRIVED BACK AT SOURCE
-                                    messageBank.addMessage(msg);
-                                    String destinationStationAddress = "http:/" + remoteAddress;
-                                    String removeMessageId = msg.route.get(msg.hopCount).messageId;
-                                    String parentAddress = ""; // no parent address as this is the source
-                                    MessageSentLog removedLog = messageSentLogs.removeLog(parentAddress,
-                                            destinationStationAddress, removeMessageId);
-                                    if (removedLog == null) {
-                                        // Failed to remove log
-                                        throw new Exception("Failed to remove log");
+                            if (msg.sourceName.equals(station.stationName)) {
+                                // ARRIVED BACK AT SOURCE
+                                messageBank.addMessage(msg);
+                                String destinationStationAddress = "http:/" + remoteAddress;
+                                String removeMessageId = msg.route.get(msg.hopCount).messageId;
+                                String parentAddress = ""; // no parent address as this is the source
+                                MessageSentLog removedLog = messageSentLogs.removeLog(parentAddress,
+                                        destinationStationAddress, removeMessageId);
+                                if (removedLog == null) {
+                                    // Failed to remove log
+                                    throw new Exception("Failed to remove log");
+                                }
+                                if (messageSentLogs.getLogs(removedLog.messageId) == null) {
+                                    // No more logs left for this messageId
+                                    // collate results and send back to client
+                                    Message collatedMessage = collateMessages(msg, messageBank);
+                                    collatedMessage = matchRoute(collatedMessage);
+                                    Boolean routeEndFound = collatedMessage.routeEndFound;
+                                    msg = addRouteStationToTripDetails(msg);
+                                    String summarisedTrip = getSummarisedTrip(collatedMessage);
+                                    List<List<String>> earliestTripsList = collateEarliestTrips(msg);
+                                    // modify html content
+                                    htmlContent = modifyHtmlContent(htmlContent, summarisedTrip, station.stationName,
+                                            gson.toJson(station.timetable), station.getStationTcpAddress(),
+                                            gson.toJson(station.TRIP_TYPE), "true", gson.toJson(earliestTripsList),
+                                            gson.toJson(routeEndFound));
+                                    // get open tCP socket channel
+                                    SocketChannel socketChannel = clientRequestLog.getSocketChannel();
+                                    String message = "HTTP/1.1 200 OK\r\n\r\n" + htmlContent;
+                                    System.out.println("Message length: " + message.length());
+                                    ByteBuffer responseBuffer = ByteBuffer.allocate(message.length());
+                                    responseBuffer.clear();
+                                    responseBuffer.put(message.getBytes());
+                                    responseBuffer.flip();
+                                    while (responseBuffer.hasRemaining()) {
+                                        socketChannel.write(responseBuffer);
                                     }
-                                    if (messageSentLogs.getLogs(removedLog.messageId) == null) {
-                                        // No more logs left for this messageId
-                                        // collate results and send back to client
-                                        Message collatedMessage = collateMessages(msg, messageBank);
-                                        collatedMessage = matchRoute(collatedMessage);
-                                        Boolean routeEndFound = collatedMessage.routeEndFound;
-                                        String summarisedTrip = getSummarisedTrip(collatedMessage);
-                                        msg = addRouteStationToTripDetails(msg);
-                                        List<List<String>> earliestTripsList = collateEarliestTrips(msg);
-                                        // modify html content
-                                        modifyHtmlContent(htmlContent, summarisedTrip, station.stationName,
-                                                gson.toJson(station.timetable), station.getStationTcpAddress(),
-                                                gson.toJson(station.TRIP_TYPE), "true", gson.toJson(earliestTripsList),
-                                                gson.toJson(routeEndFound));
-                                    }
+                                    socketChannel.close();
                                 }
                             }
 
@@ -1096,7 +1113,7 @@ public class Station {
                             if (msg.destinationName.equals(station.stationName)) {
                                 // I AM SOURCE STATION. DEAD END FOUND.
                                 msg.routeEndFound = true;
-                                sendUdpToParent(station, msg, 0);
+                                sendUdpToParent(station, msg, 0, datagramChannel);
                             } else {
                                 // IS THE MESSAGE INTENDED FOR ME?
                                 Boolean messageIntended = checkStationInEarliestTrips(msg, station);
@@ -1118,30 +1135,33 @@ public class Station {
                                             // DEAD END FOUND
                                             msg.routeEndFound = true;
                                             // let parent know that a deadend is found
-                                            sendUdpToParent(station, msg, 1);
+                                            sendUdpToParent(station, msg, 1, datagramChannel);
                                         }
                                         if (destFound == true && routeEndFound == false) {
                                             // DESTINATION FOUND AND NOT A DEAD END
                                             // SEND MESSAGE BACK TO PARENT
+                                            System.out.println("Removing non destination");
                                             msg = removeNonDestination(msg, station);
-                                            sendUdpToParent(station, msg, 1);
+                                            System.out.println("Sending to parent non destination");
+                                            sendUdpToParent(station, msg, 1, datagramChannel);
                                         }
                                         if (destFound == false && routeEndFound == false) {
                                             // SEND MESSAGE TO NEIGHBOURS
-                                            Boolean sentToNeighbours = sendUdp(station, msg, messageSentLogs);
+                                            Boolean sentToNeighbours = sendUdp(station, msg, messageSentLogs,
+                                                    datagramChannel);
                                             if (!sentToNeighbours) {
                                                 // failed to send to neighbours as dead end is found
                                                 // set route end to true
                                                 msg.routeEndFound = true;
                                                 // send to parent instead
-                                                sendUdpToParent(station, msg, 1);
+                                                sendUdpToParent(station, msg, 1, datagramChannel);
                                             }
                                         }
                                         if (destFound == false && routeEndFound == true) {
                                             // DEAD END IS FOUND AND DEST NOT FOUND
                                             msg.routeEndFound = true;
                                             // SEND BACK TO PARENT
-                                            sendUdpToParent(station, msg, 1);
+                                            sendUdpToParent(station, msg, 1, datagramChannel);
                                         }
                                     }
                                 } else {
@@ -1149,7 +1169,7 @@ public class Station {
                                     // Marks msg as Route end found
                                     msg.routeEndFound = true;
                                     // SEND BACK TO PARENT
-                                    sendUdpToParent(station, msg, 0);
+                                    sendUdpToParent(station, msg, 0, datagramChannel);
                                 }
                             }
                         }
