@@ -100,31 +100,34 @@ public class Station {
                 if (earliestTrips.size() == 0) {
                     if (timetableRecordTime.compareTo(timeValue) >= 0) {
                         System.out.println("initial size of 0");
-                        System.out.println("Added timetableRecord: " + timetableRecord);
+                        // System.out.println("Added timetableRecord: " + timetableRecord);
                         earliestTrips.add(timetableRecord);
-                        System.out.println("earliestTrips List: " + earliestTrips);
+                        // System.out.println("earliestTrips List: " + earliestTrips);
                     }
                 } else {
                     Boolean recordFound = false;
                     for (List<String> trips : earliestTrips) {
                         // if already in earliestTrips then do not add
-                        System.out
-                                .println("timetableRecordTime: " + timetableRecordTime + " || timeValue: " + timeValue);
-                        System.out.println("timetableRecordTime greater or equal to zero?"
-                                + (timetableRecordTime.compareTo(timeValue) >= 0));
-                        System.out.println("trips station: " + trips.get(4) + " || timetableRecordDestination: "
-                                + timetableRecordDestination);
-                        System.out.println("trips station match?: " + trips.get(4).equals(timetableRecordDestination));
+                        // System.out
+                        // .println("timetableRecordTime: " + timetableRecordTime + " || timeValue: " +
+                        // timeValue);
+                        // System.out.println("timetableRecordTime greater or equal to zero?"
+                        // + (timetableRecordTime.compareTo(timeValue) >= 0));
+                        // System.out.println("trips station: " + trips.get(4) + " ||
+                        // timetableRecordDestination: "
+                        // + timetableRecordDestination);
+                        // System.out.println("trips station match?: " +
+                        // trips.get(4).equals(timetableRecordDestination));
                         if ((timetableRecordTime.compareTo(timeValue) >= 0)
                                 && (trips.get(4).equals(timetableRecordDestination))) {
                             recordFound = true;
-                            System.out.println("Do not add!");
+                            // System.out.println("Do not add!");
                             break;
                         }
                     }
                     // if not yet in earliestTrips, then add
                     if (recordFound == false) {
-                        System.out.println("Adding: " + timetableRecord);
+                        // System.out.println("Adding: " + timetableRecord);
                         earliestTrips.add(timetableRecord);
                     }
                 }
@@ -247,23 +250,43 @@ public class Station {
          * @param messageId
          * @return
          */
-        public MessageSentLog removeLog(String parentAddress, String destinationStationAddress, String messageId) {
-            for (MessageSentLog log : this.logs) {
+        public MessageSentLog removeLog(String parentAddress, String destinationStationAddress, String messageId)
+                throws Exception {
+            List<MessageSentLog> logsToRemove = new ArrayList<MessageSentLog>();
+            try {
+                for (MessageSentLog log : this.logs) {
 
-                System.out.println("parentAddress: " + parentAddress);
-                System.out.println("destinationStationAddress: " + destinationStationAddress);
-                System.out.println("messageId: " + messageId);
-                System.out.println("log.parentAddress: " + log.parentAddress);
-                System.out.println("log.destinationStationAddress: " + log.destinationStationAddress);
-                System.out.println("log.messageId: " + log.messageId);
+                    // System.out.println("parentAddress: " + parentAddress);
+                    // System.out.println("destinationStationAddress: " +
+                    // destinationStationAddress);
+                    // System.out.println("messageId: " + messageId);
+                    // System.out.println("log.parentAddress: " + log.parentAddress);
+                    // System.out.println("log.destinationStationAddress: " +
+                    // log.destinationStationAddress);
+                    // System.out.println("log.messageId: " + log.messageId);
 
-                if (log.parentAddress.equals(parentAddress)
-                        && log.destinationStationAddress.equals(destinationStationAddress)
-                        && log.messageId.equals(messageId)) {
-                    this.logs.remove(log);
-                    return log;
+                    if (log.parentAddress.equals(parentAddress)
+                            && log.destinationStationAddress.equals(destinationStationAddress)
+                            && log.messageId.equals(messageId)) {
+                        // System.out.println("Match found. Adding to log to remove.");
+                        // this.logs.remove(log);
+                        logsToRemove.add(log);
+                    }
                 }
+            } catch (Exception e) {
+                throw e;
             }
+
+            Gson gson = new Gson();
+            System.out.println("Logs to be removed list: " + gson.toJson(logsToRemove));
+
+            for (MessageSentLog logToRemove : logsToRemove) {
+                System.out.println("Log to be removed: " + gson.toJson(logToRemove));
+                this.logs.remove(logToRemove);
+                System.out.println("Removed log.");
+                return logToRemove;
+            }
+            System.out.println("There was no log to remove.");
             return null;
         }
 
@@ -577,7 +600,7 @@ public class Station {
         return message;
     }
 
-    public static Message collateMessages(Message msg, MessageBank messageBank) {
+    public static Message collateMessages(Message msg, MessageBank messageBank) throws Exception {
         Message earliestMessage = null;
         String tripType = msg.tripType;
         int hopCount = msg.hopCount;
@@ -590,13 +613,13 @@ public class Station {
                 try {
                     if (message.routeEndFound == false
                             && message.route.get(message.hopCount).messageId.equals(messageId)) {
-                        earliestTime = message.route.get(message.route.size() - 1).earliestTrips.get(0).get(4);
+                        earliestTime = message.route.get(message.route.size() - 1).earliestTrips.get(0).get(3);
                         earliestMessage = message;
                         break;
                     }
                 } catch (Exception e) {
                     // do nothing - the message is some other message that doesn't have the same
-                    // hopCount
+                    throw e;
                 }
             }
             for (Message message : messageBank.bank) {
@@ -605,7 +628,7 @@ public class Station {
                             && message.route.get(message.route.size() - 1).earliestTrips.size() > 0
                             && message.route.get(message.hopCount).messageId.equals(messageId)) {
                         String compareEarliestTime = message.route.get(message.route.size() - 1).earliestTrips.get(0)
-                                .get(4);
+                                .get(3);
                         Date dteCompareEarliestTime = new SimpleDateFormat("HH:mm").parse(compareEarliestTime);
                         Date dteEarliestTime = new SimpleDateFormat("HH:mm").parse(earliestTime);
                         if (dteCompareEarliestTime.compareTo(dteEarliestTime) < 0) {
@@ -616,9 +639,14 @@ public class Station {
                 } catch (Exception e) {
                     // do nothing. the message is some other mssage that doens't have to same
                     // hopCount
+                    throw e;
                 }
             }
         }
+
+        // remove message from message bank
+        messageBank.removeMessage(hopCount, messageId);
+
         if (earliestMessage != null) {
             return earliestMessage;
         } else {
@@ -1125,12 +1153,22 @@ public class Station {
                                 if (messageSentLogs.getLogs(removedLog.messageId) == null) {
                                     // No more logs left for this messageId
                                     // collate results and send back to parent
+                                    System.out.println("Begin collating message to send back to parent.");
                                     Message collatedMessage = collateMessages(msg, messageBank);
+                                    System.out.println("message collated.");
+                                    System.out.println("Begin matching route.");
                                     collatedMessage = matchRoute(collatedMessage);
+                                    System.out.println("Matching route completed.");
                                     // -1 hopCount because we want to
                                     // decrement the hopCount as we
                                     // return back to source
+                                    System.out.println("Begin sending to parent.");
                                     sendUdpToParent(station, msg, 1, datagramChannel);
+                                    System.out.println("Send to parent complete.");
+                                } else {
+                                    System.out.println("Logs remaining."
+                                            + gson.toJson(messageSentLogs.getLogs(removedLog.messageId)));
+
                                 }
                             }
 

@@ -602,7 +602,7 @@ def collateMessages(msg, messageBank):
             try:
                 if message["routeEndFound"] == False and message["route"][hopCount]["messageId"] == messageId:
                     # grab matching route
-                    earliestTime = message["route"][-1]["earliestTrips"][0][4]
+                    earliestTime = message["route"][-1]["earliestTrips"][0][3]
                     earliestMessage = message
                     break
             except:
@@ -614,7 +614,7 @@ def collateMessages(msg, messageBank):
                     len(message["route"][-1]["earliestTrips"]) > 0 and \
                         message["route"][hopCount]["messageId"] == messageId:
                     # grab last route
-                    compareEarliestTime = message["route"][-1]["earliestTrips"][0][4]
+                    compareEarliestTime = message["route"][-1]["earliestTrips"][0][3]
                     if compareEarliestTime < earliestTime:
                         earliestTime = compareEarliestTime
                         earliestMessage = message
