@@ -12,6 +12,8 @@ from datetime import datetime
 import copy
 import uuid
 
+# AUTHOR : Jonathan Neo
+
 # CONSTANTS
 SERVER = "127.0.0.1"
 FORMAT = "UTF-8"
