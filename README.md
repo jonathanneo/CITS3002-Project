@@ -12,7 +12,7 @@ Languages used: Python, Java
 
 TCP/IP is used for the communication between client and server. 
 To faciliate client and station communication, a User Interface is created using Bootstrap, HTML, jQuery, CSS and JavaScript. 
-![User interface](userInterface.png "User Interface")
+![User interface](userInterface.PNG "User Interface")
 
 * Simple response:
   * A simple trip response in the following format: 
@@ -33,7 +33,7 @@ http://127.0.0.1:<port>/?to=<stationName>&time=<time>&tripType=<tripType>
 
 
 If a route does not exist, a message "Oh uh! No route found!" will be displayed in the simply response above, and the trip details. 
-![Route does not exist](routeDoesNotExist.png "Route does not exist")
+![Route does not exist](routeDoesNotExist.PNG "Route does not exist")
 
 
 # Inter-station communication (UDP)
