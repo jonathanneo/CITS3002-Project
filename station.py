@@ -831,6 +831,8 @@ def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSen
                     print(f"<<<<<<<<<<<<< DESTINATION FOUND >>>>>>>>>>>>>>>>>")
                 routeEndFound = routeEnd(station, msg)
                 print(f"A dead end is detected: {routeEndFound}")
+                # TODO: SET routeEndFound to True if indeed True
+
                 # if station contains route to destination, then send back to source
                 if destFound:
                     print("DestinationFound. Sending to parent.")
