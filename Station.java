@@ -1002,61 +1002,21 @@ public class Station {
                                         gson.toJson(station.TRIP_TYPE), "true", gson.toJson(earliestTripsList),
                                         "false");
                                 System.out.println("---- Converted html content ----- ");
+                                String message = "HTTP/1.1 200 OK\r\n\r\n" + htmlContent;
+                                System.out.println("Message length: " + message.length());
+                                ByteBuffer responseBuffer = ByteBuffer.allocate(message.length());
+                                responseBuffer.clear();
+                                responseBuffer.put(message.getBytes());
+                                responseBuffer.flip();
+                                while (responseBuffer.hasRemaining()) {
+                                    socketChannel.write(responseBuffer);
+                                }
+                                socketChannel.close();
                             } else {
                                 // send UDP to neighbours
                                 Boolean sentToNeighbours = sendUdp(station, msg, messageSentLogs);
-                                Boolean allMessagesReturned = false;
-                                while (!allMessagesReturned) {
-                                    // Receive message
-                                    DatagramChannel dgChannel = (DatagramChannel) key.channel();
-                                    ByteBuffer datagramBuffer = ByteBuffer.allocate(station.messageSize);
-                                    SocketAddress remoteAddress = dgChannel.receive(datagramBuffer);
-                                    datagramBuffer.flip();
-                                    int limits = datagramBuffer.limit();
-                                    byte bytes[] = new byte[limits];
-                                    datagramBuffer.get(bytes, 0, limits);
-                                    String msgString = new String(bytes);
-                                    Gson gson = new Gson();
-                                    Message msgObject = gson.fromJson(msgString, Message.class);
-                                    System.out.println("Client at: " + remoteAddress + " ||  sent message: "
-                                            + gson.toJson(msgObject.route));
-                                    dgChannel.close();
 
-                                    // INCOMING MESSAGE
-                                    if (msgObject.messageType.equals("incoming")) {
-                                        if (msgObject.sourceName.equals(station.stationName)) {
-                                            // ARRIVED BACK AT SOURCE
-                                            messageBank.addMessage(msgObject);
-                                            String destinationStationAddress = "http:/" + remoteAddress;
-                                            String removeMessageId = msgObject.route.get(msgObject.hopCount).messageId;
-                                            String parentAddress = ""; // no parent address as this is the source
-                                            MessageSentLog removedLog = messageSentLogs.removeLog(parentAddress,
-                                                    destinationStationAddress, removeMessageId);
-                                            if (removedLog == null) {
-                                                // Failed to remove log
-                                                throw new Exception("Failed to remove log");
-                                            }
-                                            if (messageSentLogs.getLogs(removedLog.messageId) == null) {
-                                                // No more logs left for this messageId
-                                                allMessagesReturned = true;
-                                                // collate results and send back to client
-                                                Message collatedMessage = collateMessages(msgObject, messageBank);
-                                                collatedMessage = matchRoute(collatedMessage);
-                                                Boolean routeEndFound = collatedMessage.routeEndFound;
-                                                String summarisedTrip = getSummarisedTrip(collatedMessage);
-                                                msg = addRouteStationToTripDetails(msg);
-                                                List<List<String>> earliestTripsList = collateEarliestTrips(msg);
-                                                // modify html content
-                                                modifyHtmlContent(htmlContent, summarisedTrip, station.stationName,
-                                                        gson.toJson(station.timetable), station.getStationTcpAddress(),
-                                                        gson.toJson(station.TRIP_TYPE), "true",
-                                                        gson.toJson(earliestTripsList), gson.toJson(routeEndFound));
-                                            }
-                                        }
-                                    }
-
-                                }
-
+                                // Store client request and socket channel in log (single log)
                             }
                         } else {
                             System.out.println("RETURN EMPTY PAGE TO CLIENT");
@@ -1065,19 +1025,17 @@ public class Station {
                             htmlContent = modifyHtmlContent(htmlContent, "", station.stationName,
                                     gson.toJson(station.timetable), station.getStationTcpAddress(),
                                     gson.toJson(station.TRIP_TYPE), "false", gson.toJson(""), "false");
+                            String message = "HTTP/1.1 200 OK\r\n\r\n" + htmlContent;
+                            System.out.println("Message length: " + message.length());
+                            ByteBuffer responseBuffer = ByteBuffer.allocate(message.length());
+                            responseBuffer.clear();
+                            responseBuffer.put(message.getBytes());
+                            responseBuffer.flip();
+                            while (responseBuffer.hasRemaining()) {
+                                socketChannel.write(responseBuffer);
+                            }
+                            socketChannel.close();
                         }
-
-                        String message = "HTTP/1.1 200 OK\r\n\r\n" + htmlContent;
-                        System.out.println("Message length: " + message.length());
-                        ByteBuffer responseBuffer = ByteBuffer.allocate(message.length());
-                        responseBuffer.clear();
-                        responseBuffer.put(message.getBytes());
-                        responseBuffer.flip();
-                        while (responseBuffer.hasRemaining()) {
-                            socketChannel.write(responseBuffer);
-                        }
-                        socketChannel.close();
-
                     } else if ((int) key.attachment() == station.udpPort) {
                         // Receive message
                         DatagramChannel dgChannel = (DatagramChannel) key.channel();
@@ -1096,6 +1054,42 @@ public class Station {
 
                         // INCOMING MESSAGE
                         if (msg.messageType.equals("incoming")) {
+                            // Receive message
+                            System.out.println(
+                                    "Client at: " + remoteAddress + " ||  sent message: " + gson.toJson(msg.route));
+                            dgChannel.close();
+
+                            // INCOMING MESSAGE
+                            if (msg.messageType.equals("incoming")) {
+                                if (msg.sourceName.equals(station.stationName)) {
+                                    // ARRIVED BACK AT SOURCE
+                                    messageBank.addMessage(msg);
+                                    String destinationStationAddress = "http:/" + remoteAddress;
+                                    String removeMessageId = msg.route.get(msg.hopCount).messageId;
+                                    String parentAddress = ""; // no parent address as this is the source
+                                    MessageSentLog removedLog = messageSentLogs.removeLog(parentAddress,
+                                            destinationStationAddress, removeMessageId);
+                                    if (removedLog == null) {
+                                        // Failed to remove log
+                                        throw new Exception("Failed to remove log");
+                                    }
+                                    if (messageSentLogs.getLogs(removedLog.messageId) == null) {
+                                        // No more logs left for this messageId
+                                        // collate results and send back to client
+                                        Message collatedMessage = collateMessages(msg, messageBank);
+                                        collatedMessage = matchRoute(collatedMessage);
+                                        Boolean routeEndFound = collatedMessage.routeEndFound;
+                                        String summarisedTrip = getSummarisedTrip(collatedMessage);
+                                        msg = addRouteStationToTripDetails(msg);
+                                        List<List<String>> earliestTripsList = collateEarliestTrips(msg);
+                                        // modify html content
+                                        modifyHtmlContent(htmlContent, summarisedTrip, station.stationName,
+                                                gson.toJson(station.timetable), station.getStationTcpAddress(),
+                                                gson.toJson(station.TRIP_TYPE), "true", gson.toJson(earliestTripsList),
+                                                gson.toJson(routeEndFound));
+                                    }
+                                }
+                            }
 
                         } else {
                             // OUTGOING MESSAGE
@@ -1182,6 +1176,7 @@ public class Station {
                 keyIterator.remove();
             }
         }
+
     }
 
     public static void main(String[] args) throws Exception {
