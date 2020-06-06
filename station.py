@@ -745,9 +745,14 @@ def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSen
                         route["earliestTrips"][0].insert(0,
                                                          route["stationName"])
                         earliestTrips.append(route["earliestTrips"][0])
+                    # get summarised trip
+                    summarisedTrip = getSummarisedTrip(collatedMessage)
+                if routeEndFound:
+                    # set summarised trip to not found message
+                    summarisedTrip = "Oh uh! No route found!"
+
                 clientLog = clientRequestLogs.getLog(
                     collatedMessage)
-                summarisedTrip = getSummarisedTrip(collatedMessage)
                 sendResponseToClient(
                     station, clientLog.data, earliestTrips, clientLog.sock, clientLog.sel, "true", routeEndFound, summarisedTrip)
                 removedClientLogs = clientRequestLogs.removeLog(
@@ -827,12 +832,8 @@ def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSen
                 # check if destination is found
                 destFound, earliestTrip = findDestination(station, msg)
                 print(f"Destination has been found: {destFound}")
-                if destFound:
-                    print(f"<<<<<<<<<<<<< DESTINATION FOUND >>>>>>>>>>>>>>>>>")
                 routeEndFound = routeEnd(station, msg)
                 print(f"A dead end is detected: {routeEndFound}")
-                # TODO: SET routeEndFound to True if indeed True
-
                 # if station contains route to destination, then send back to source
                 if destFound:
                     print("DestinationFound. Sending to parent.")
