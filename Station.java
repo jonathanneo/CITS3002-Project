@@ -33,7 +33,7 @@ public class Station {
     String SERVER = "127.0.0.1";
     String FORMAT = "UTF-8";
     String[] TRIP_TYPE = { "FastestTrip" };
-    int MESSAGE_SIZE = 10000;
+    int MESSAGE_SIZE = 50000;
 
     // variables
     String stationName;
@@ -108,26 +108,14 @@ public class Station {
                     Boolean recordFound = false;
                     for (List<String> trips : earliestTrips) {
                         // if already in earliestTrips then do not add
-                        // System.out
-                        // .println("timetableRecordTime: " + timetableRecordTime + " || timeValue: " +
-                        // timeValue);
-                        // System.out.println("timetableRecordTime greater or equal to zero?"
-                        // + (timetableRecordTime.compareTo(timeValue) >= 0));
-                        // System.out.println("trips station: " + trips.get(4) + " ||
-                        // timetableRecordDestination: "
-                        // + timetableRecordDestination);
-                        // System.out.println("trips station match?: " +
-                        // trips.get(4).equals(timetableRecordDestination));
                         if ((timetableRecordTime.compareTo(timeValue) >= 0)
                                 && (trips.get(4).equals(timetableRecordDestination))) {
                             recordFound = true;
-                            // System.out.println("Do not add!");
                             break;
                         }
                     }
                     // if not yet in earliestTrips, then add
                     if (recordFound == false) {
-                        // System.out.println("Adding: " + timetableRecord);
                         earliestTrips.add(timetableRecord);
                     }
                 }
@@ -255,21 +243,9 @@ public class Station {
             List<MessageSentLog> logsToRemove = new ArrayList<MessageSentLog>();
             try {
                 for (MessageSentLog log : this.logs) {
-
-                    // System.out.println("parentAddress: " + parentAddress);
-                    // System.out.println("destinationStationAddress: " +
-                    // destinationStationAddress);
-                    // System.out.println("messageId: " + messageId);
-                    // System.out.println("log.parentAddress: " + log.parentAddress);
-                    // System.out.println("log.destinationStationAddress: " +
-                    // log.destinationStationAddress);
-                    // System.out.println("log.messageId: " + log.messageId);
-
                     if (log.parentAddress.equals(parentAddress)
                             && log.destinationStationAddress.equals(destinationStationAddress)
                             && log.messageId.equals(messageId)) {
-                        // System.out.println("Match found. Adding to log to remove.");
-                        // this.logs.remove(log);
                         logsToRemove.add(log);
                     }
                 }
@@ -1168,7 +1144,6 @@ public class Station {
                                 } else {
                                     System.out.println("Logs remaining."
                                             + gson.toJson(messageSentLogs.getLogs(removedLog.messageId)));
-
                                 }
                             }
 

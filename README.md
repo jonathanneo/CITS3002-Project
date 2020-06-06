@@ -4,48 +4,85 @@ The goal of this project is to develop a server application to manage the data a
 
 # Operating system
 
-Operating system: Microsoft Windows 10 Pro running Windows Subsystem for Linux (WSL)
+Operating system: Microsoft Windows 10 Pro running Windows Subsystem for Linux (WSL).
 
-# Transperth data
+Languages used: Python, Java
 
-Perth's Public Transport Authority (PTA, or Transperth) provides public access to its scheduled times, stop locations, and route information from its webpage www.transperth.wa.gov.au/About/Spatial-Data-Access.
+# Client (web browser) and station communcation (TCP)
 
-# Testing
+TCP/IP is used for the communication between client and server. 
+To faciliate client and station communication, a User Interface is created using Bootstrap, HTML, jQuery, CSS and JavaScript. 
+![User interface](userInterface.png "User Interface")
 
-We will approach the project using connected networks of increasing size: 1 station, 2 stations, 5 stations, 10 stations, 20 stations,....
-Note that running more than 10 Java virtual machines on a single computer will probably not be possible.
+* Simple response:
+  * A simple trip response in the following format: 
+  Source, SourceStop, SourceDepartTime, Vehicle, Target, TargetArrivalTime
+* Detailed response: 
+  * A more detailed response is included for each leg of the trip under "Trip Details". 
 
-To test my code, use:
-
+To submit a GET request, simply specify the following: 
 ```
-py station.py North_Terminus 5050 6060 9000 9001 9002
+http://127.0.0.1:<port>/?to=<stationName>
+```
+When using the User Interface, you can also populate the "Destination", "Departure Time" and "Type of Trip" fields which will change the GET request to as follows:
+```
+http://127.0.0.1:<port>/?to=<stationName&time=<time>&tripType=<tripType>
+```
+Note that the simple method will default to using the CurrentTime for "time" and FastestTrip for "Type of Trip". 
+
+# Inter-station communication (UDP)
+
+UDP/IP is used for the communication between servers.
+The basic approach used for inter-station communication is as follows: 
+
+![Basic diagram](basicDiagram.png "Basic Diagram")
+
+* Outgoing: 
+  * Each node will check if there is a valid timetable to the next station. 
+    * If valid: adds station info to the route and send back to parent. If it is the source node, then send back to client (browser).
+    * If not valid: add station info to the route and send message to neighbours. Note: it will not send message to neighbours already in route.
+* Incoming: 
+  * Messages that are returning to the node will be stored in a message bank until all messages with the same messageId have returned. 
+  * Once all messages have returned, the station will evaluate the FastestRoute across the messages with the same messageId that it received from its neighbours.
+  * The station will then send the message with the FastestRoute back to it's parent.
+
+Notes: 
+* Advanced diagram of inter-station communication included in appendix below. 
+
+# Compiling and running server
+
+To compile Station.java, use the following code: 
+```
+javac -classpath "gson-2.8.6.jar" Station.java
 ```
 
-# Resources
+To run Station.class (Java), use the following code: 
+```
+java -cp .;gson-2.8.6.jar Station <stationName> <tcpPort> <udpPort> <neighbourPorts...>
+```
 
-- Project Information: https://teaching.csse.uwa.edu.au/units/CITS3002/project2020/index.php
-- Getting Started (really helpful!): https://teaching.csse.uwa.edu.au/units/CITS3002/project2020/getting-started.php
-- Clarifications: https://teaching.csse.uwa.edu.au/units/CITS3002/project2020/clarifications.php
+To run station.py (Python), use the following code: 
+```
+python3 station.py <stationName> <tcpPort> <udpPort> <neighbourPorts...>
+```
 
-# Networking Details
+# Folder structure
 
-Typical invocation e.g.:
+* root
+  * Station.java : contains the code to run the java station server
+  * station.py : contains the code to run the Python station server
+  * station.html : contains the html, javascript, css, jQuery to return the user interface. This is read as a string by Java, parameters are then replaced, and finally sent to the client browser. 
+  * tt-(stationName) : station timetables will be in the same directory level as the code files. 
+  * .gitignore : ignore local files and do not commit to the repo. 
 
-    ./station Warwick-Stn 2401 2408 2560 2566
 
-- Station name: Warwick-Stn
-- TCP/IP port (listening for queries from webpage): 2401
-- UDP/IP port (listening for other stations): 2408
-- Physically adjacent to (stations with UDP ports): 2560, 2566
+# Appendix
 
-1. Each station server is its own process.
-2. All station servers execute on the same computer. Thus all network traffic/URLs will refer to localhost or 127.0.0.
-3. Query and reply will be transmitted using the (minimum amount necessary) HTTP, HTML, over bidirectional TCP/IP connection. After each query and response, the station must close the connection. If either station or webpage crash the connection will be closed.
-4. Stations communicate to each other through UDP/IP datagrams when needed.
-5. No station shall know anything apart from its own timetable and neighbouring stations.
+### Advanced diagram:
 
-# Constraints
+Note that the diagrams are not 100% representative of actual communications as some things have changed since this was created, but it is close enough. 
 
-1. Two implementations of station server in different languages: Java, Python, C xor C++.
-2. Employ core networking functions (system calls and standard library) and **not** 3rd party frameworks/resources. Don't use Python's http.server module or C++'s Boost library.
-3. Will be marked on macOS or Linux. Indicate which system you used.
+#### Outgoing messages
+![outgoing](outgoingMessage.png "Outgoing message")
+#### Incoming messages
+![incoming](incomingMessage.png "Incoming message")
