@@ -1085,14 +1085,22 @@ public class Station {
                                     Message collatedMessage = collateMessages(msg, messageBank);
                                     collatedMessage = matchRoute(collatedMessage);
                                     Boolean routeEndFound = collatedMessage.routeEndFound;
-                                    msg = addRouteStationToTripDetails(msg);
-                                    String summarisedTrip = getSummarisedTrip(collatedMessage);
-                                    List<List<String>> earliestTripsList = collateEarliestTrips(msg);
-                                    // modify html content
-                                    htmlContent = modifyHtmlContent(htmlContent, summarisedTrip, station.stationName,
-                                            gson.toJson(station.timetable), station.getStationTcpAddress(),
-                                            gson.toJson(station.TRIP_TYPE), "true", gson.toJson(earliestTripsList),
-                                            gson.toJson(routeEndFound));
+                                    if (!routeEndFound) {
+                                        // No dead end found
+                                        msg = addRouteStationToTripDetails(collatedMessage);
+                                        String summarisedTrip = getSummarisedTrip(collatedMessage);
+                                        List<List<String>> earliestTripsList = collateEarliestTrips(msg);
+                                        // modify html content
+                                        htmlContent = modifyHtmlContent(htmlContent, summarisedTrip,
+                                                station.stationName, gson.toJson(station.timetable),
+                                                station.getStationTcpAddress(), gson.toJson(station.TRIP_TYPE), "true",
+                                                gson.toJson(earliestTripsList), gson.toJson(routeEndFound));
+                                    } else {
+                                        htmlContent = modifyHtmlContent(htmlContent, "Oh uh! No route found!",
+                                                station.stationName, gson.toJson(station.timetable),
+                                                station.getStationTcpAddress(), gson.toJson(station.TRIP_TYPE), "true",
+                                                gson.toJson(""), "true");
+                                    }
                                     // get open tCP socket channel
                                     SocketChannel socketChannel = clientRequestLog.getSocketChannel();
                                     String message = "HTTP/1.1 200 OK\r\n\r\n" + htmlContent;
