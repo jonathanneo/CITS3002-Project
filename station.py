@@ -20,6 +20,10 @@ MESSAGE_SIZE = 50000
 
 
 class Station:
+    """
+    Station class used to contain station details
+    """
+
     def __init__(self, station, tcp_port, udp_port):
         self.stationName = station
         self.MessageSize = MESSAGE_SIZE
@@ -84,6 +88,11 @@ class Station:
 
 
 class ClientRequestLog:
+    """
+    Client Request log are used to stored request from the browser client. 
+    The requests are held here until UDP communication is complete and a response can then be provided back to the client. 
+    """
+
     def __init__(self, msg, sock, sel, data):
         self.msg = msg
         self.sock = sock
@@ -92,6 +101,10 @@ class ClientRequestLog:
 
 
 class ClientRequestLogs:
+    """
+    Individual requests from the browser client is stored in a list "logs". 
+    """
+
     def __init__(self):
         self.logs = []
 
@@ -114,6 +127,10 @@ class ClientRequestLogs:
 
 
 class MessageSentLog:
+    """
+    Messages sent out from the server via UDP are tracked as a messageSentLog object. 
+    """
+
     def __init__(self, messageId, parentAddress, stationAddress, destinationStationAddress):
         self.messageId = str(messageId)
         self.parentAddress = str(parentAddress)
@@ -122,6 +139,10 @@ class MessageSentLog:
 
 
 class MessageSentLogs:
+    """
+    All messages sent out from the server via UDP are stored in a MessageSentLogs object's logs. 
+    """
+
     def __init__(self):
         self.logs = []
 
@@ -147,6 +168,10 @@ class MessageSentLogs:
 
 
 class Message:
+    """
+    This is the message that is used for inter-station communication via UDP. The message object is converted to JSON before sending.  
+    """
+
     def __init__(self, sourceName, destinationName, tripType, time, messageId, messageType):
         self.sourceName = sourceName
         self.destinationName = destinationName
@@ -164,6 +189,11 @@ class Message:
 
 
 class MessageBank:
+    """
+    The message bank is used to store incoming messages from other neighbouring stations. 
+    Only when all messages that were initially sent out has been returned, can the message be collated and removed from the message bank. 
+    """
+
     def __init__(self):
         self.bank = []
 
@@ -188,6 +218,7 @@ class MessageBank:
         return removedMessages
 
 
+# here is the html content used
 html_content = """
 <!DOCTYPE html>
 <html>
@@ -304,6 +335,9 @@ html_content = """
 
 
 def acceptTcpWrapper(sock, sel):
+    """
+    Accept the TCP request
+    """
     conn, addr = sock.accept()  # Should be ready to read
     conn.setblocking(False)
     # create a data object that holds addr, inb and outb
@@ -314,10 +348,16 @@ def acceptTcpWrapper(sock, sel):
 
 
 def getRequestBody(request_array):
+    """
+    Get the reqest body
+    """
     return str(request_array[0]).split(" ")[1].replace("/?", "")
 
 
 def getRequestObject(request_body):
+    """
+    Get the request object
+    """
     request_body_objects = []
     request_body = request_body.split("&")
     for item in request_body:
@@ -327,6 +367,9 @@ def getRequestObject(request_body):
 
 
 def matchRoute(msg):
+    """
+    Remove earliest trips that are already contained in the route
+    """
     numRoutes = len(msg["route"])
     for index in range(numRoutes):
         earliestTrips = msg["route"][index]["earliestTrips"]
@@ -345,6 +388,9 @@ def matchRoute(msg):
 
 
 def sendUdp(station, msg, udpServerSocket, messageSentLogs):
+    """
+    Send the message via UDP to the neighbours
+    """
     neighbours = station.neighbours
     msg_clean = json.dumps(msg)
     message = msg_clean.encode(FORMAT)
@@ -386,6 +432,9 @@ def sendUdp(station, msg, udpServerSocket, messageSentLogs):
 
 
 def getMessageToSend(requestObject, station, messageId):
+    """
+    Use the request object from the client (browser) and create a new Message to be sent out to neighbours.
+    """
     print(f"Request Object: {requestObject}")
     destination = ""
     time = ""
@@ -419,6 +468,9 @@ def getMessageToSend(requestObject, station, messageId):
 
 
 def findDestination(station, msg):
+    """
+    Check if destination is in message (timetable)
+    """
     destinationName = msg["destinationName"]
     route = msg["route"][msg["hopCount"]]
     for trip in msg["route"][msg["hopCount"]]["earliestTrips"]:
@@ -428,6 +480,9 @@ def findDestination(station, msg):
 
 
 def sendUdpToParent(station, msg, udpServerSocket, hopCountDeduct):
+    """
+    Send the message back to it's parent via UDP
+    """
     # print(f"Entering sendUdpToParent function")
     msg["messageType"] = "incoming"
     msg["hopCount"] = msg["hopCount"] - hopCountDeduct
@@ -446,6 +501,9 @@ def sendUdpToParent(station, msg, udpServerSocket, hopCountDeduct):
 
 
 def sendResponseToClient(station, data, earliestTrip, sock, sel, stationResponse, routeEndFound, summarisedTrip):
+    """
+    Send the response back to the client (Browser)
+    """
     if routeEndFound == True:
         routeEndFound = "true"
     else:
@@ -469,6 +527,9 @@ def sendResponseToClient(station, data, earliestTrip, sock, sel, stationResponse
 
 
 def getSummarisedTrip(msg):
+    """
+    Get a summarised one-liner trip details that can be displayed at the top of the browser.
+    """
     print(f"Message: {msg}")
     sourceName = msg["sourceName"]
     destinationName = msg["destinationName"]
@@ -481,6 +542,9 @@ def getSummarisedTrip(msg):
 
 
 def serviceTcpConnection(key, mask, sel, station, udpServerSocket, messageSentLogs, clientRequestLogs):
+    """
+    Service the TCP Connection - accept, read
+    """
     request = False
     method = "GET"
     sock = key.fileobj
@@ -543,6 +607,9 @@ def serviceTcpConnection(key, mask, sel, station, udpServerSocket, messageSentLo
 
 
 def startTcpPort(station, sel):
+    """
+    Start the TCP Port
+    """
     # create TCP server socket
     tcpServerSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     tcpServerSocket.bind(station.tcp_address)
@@ -554,6 +621,9 @@ def startTcpPort(station, sel):
 
 
 def startUdpPort(station, sel):
+    """
+    Start the UDP port
+    """
     # create UDP server socket
     udpServerSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     udpServerSocket.bind(station.udp_address)
@@ -564,6 +634,9 @@ def startUdpPort(station, sel):
 
 
 def removeNonDestination(message, station):
+    """
+    Remove trips that are not the destination 
+    """
     newEarliestTrips = []
     destination = message["destinationName"]
     earliestTrips = message["route"][message["hopCount"]]["earliestTrips"]
@@ -576,6 +649,9 @@ def removeNonDestination(message, station):
 
 
 def addStationToRoute(message, station, messageId):
+    """
+    Add the current station to the route
+    """
     for trip in message["route"][message["hopCount"]]["earliestTrips"]:
         if trip[4] == station.stationName:
             lastRouteTime = trip[3]
@@ -636,6 +712,9 @@ def collateMessages(msg, messageBank):
 
 
 def removeVisitedFromEarliestTrips(msg):
+    """
+    Check if a node has already been visited
+    """
     visited = []
     clonedMsg = copy.deepcopy(msg)
 
@@ -693,6 +772,9 @@ def findRoutePosition(route, stationName):
 
 
 def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSentLogs, clientRequestLogs, messageBank):
+    """
+    Service the UDP communication - send, recv
+    """
     bytesAddressPair = udpServerSocket.recvfrom(
         station.MessageSize)
     message = bytesAddressPair[0].decode()
@@ -861,6 +943,9 @@ def serviceUdpCommunication(key, mask, sel, station, udpServerSocket, messageSen
 
 
 def readTimetable(filepath):
+    """
+    Read the timetable upon startup of the server
+    """
     timetable = []
     rowCount = 0
     with open(filepath, 'r') as file:
@@ -877,6 +962,9 @@ def readTimetable(filepath):
 
 
 def checkAndUpdateTimetable(station, path, osstat):
+    """
+    Check if the timetable has been updated. If so, fetch latest. 
+    """
     if osstat.st_mtime != os.stat(path).st_mtime:
         timetable, stationCoordinates = readTimetable(path)
         station.setTimetable(timetable)
@@ -885,6 +973,9 @@ def checkAndUpdateTimetable(station, path, osstat):
 
 
 def serveTcpUdpPort(station, sel, tcpServerSocket, udpServerSocket, messageSentLogs, clientRequestLogs, messageBank, path, osstat):
+    """
+    Service both TCP And UDP server
+    """
     # wait for connection
     try:
         while True:
@@ -923,6 +1014,9 @@ def serveTcpUdpPort(station, sel, tcpServerSocket, udpServerSocket, messageSentL
 
 
 def acceptInputs(argv):
+    """
+    Accept inputs from the CLI
+    """
     if len(argv) == 0:
         print("Missing inputs.")
         sys.exit(2)

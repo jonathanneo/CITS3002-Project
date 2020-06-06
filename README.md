@@ -24,11 +24,17 @@ To submit a GET request, simply specify the following:
 ```
 http://127.0.0.1:<port>/?to=<stationName>
 ```
+Note that the simple method will default to using the CurrentTime for "time" and FastestTrip for "Type of Trip". Note also that FastestTrip is only supported. I was going to create LeastTransfers but ran out of time. 
+
 When using the User Interface, you can also populate the "Destination", "Departure Time" and "Type of Trip" fields which will change the GET request to as follows:
 ```
-http://127.0.0.1:<port>/?to=<stationName&time=<time>&tripType=<tripType>
+http://127.0.0.1:<port>/?to=<stationName>&time=<time>&tripType=<tripType>
 ```
-Note that the simple method will default to using the CurrentTime for "time" and FastestTrip for "Type of Trip". 
+
+
+If a route does not exist, a message "Oh uh! No route found!" will be displayed in the simply response above, and the trip details. 
+![Route does not exist](routeDoesNotExist.png "Route does not exist")
+
 
 # Inter-station communication (UDP)
 
@@ -47,7 +53,8 @@ The basic approach used for inter-station communication is as follows:
   * The station will then send the message with the FastestRoute back to it's parent.
 
 Notes: 
-* Advanced diagram of inter-station communication included in appendix below. 
+* JSON Strings are used for communication between servers. The JSON Strings are converted to its respective object in Java (using the GSON library) and Python (using the native JSON library). 
+* An advanced diagram of inter-station communication included in appendix below. 
 
 # Compiling and running server
 
@@ -72,7 +79,7 @@ python3 station.py <stationName> <tcpPort> <udpPort> <neighbourPorts...>
   * Station.java : contains the code to run the java station server
   * station.py : contains the code to run the Python station server
   * station.html : contains the html, javascript, css, jQuery to return the user interface. This is read as a string by Java, parameters are then replaced, and finally sent to the client browser. 
-  * tt-(stationName) : station timetables will be in the same directory level as the code files. 
+  * tt-(stationName) : station timetables should be in the same directory level as the code files. 
   * .gitignore : ignore local files and do not commit to the repo. 
 
 
